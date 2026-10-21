@@ -1,19 +1,18 @@
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            previous = self.read().get("instance")
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        command = [sys.executable, "-m", "continue_kit", "--env-file", str(self.env_file)]
-                                                                                       #!/usr/bin/env python3
+#!/usr/bin/env python3
 """Point d'entree Open WebUI pour le proxy existant de continue_kit.
 
 Emplacement : racine du depot contenant continue_kit/, a cote du .env.
 Git Bash / Windows, avec le Python du kit deja configure :
     ./.venv/Scripts/python.exe openwebui_relay.py --copy-key
 Configuration privee ailleurs : ajouter --env-file "C:/chemin/config/.env".
+Correspondances locales sans appel API : ajouter --list-models.
 
 Open WebUI installe avec pip sur le MEME poste :
     Parametres > Administration > Connexions > OpenAI > Ajouter
     URL        : http://127.0.0.1:5010/v1
     Auth       : Bearer
     Cle API    : coller la cle LOCALE copiee par --copy-key
-    Model IDs  : laisser vide ; les alias viennent de /v1/models
+    Model IDs  : laisser vide ; /v1/models fournit les noms descriptifs
     Connexion  : serveur/backend (connexion directe navigateur desactivee)
 Le terminal reste ouvert ; Ctrl+C arrete ce relais. --port change son port.
 
@@ -23,6 +22,9 @@ le mapping des modeles, les erreurs et les reponses JSON/SSE. Aucun jeton amont
 n'est manipule ici. La protection locale intervient AVANT les hooks du proxy.
 La cle locale est conservee hors du depot : ~/.openwebui-relay/local.key.
 Sans --copy-key, son contenu peut etre copie depuis ce fichier local.
+Les noms affiches associent famille declaree et ID envoye a l'API (target).
+Les IDs des requetes restent les alias du kit. Aucune interrogation du serveur
+ne certifie ici les poids effectivement charges derriere un deploiement.
 
 Les hooks existants du proxy, dont un eventuel historique ConversationStore,
 restent actifs : aucune isolation de cet historique n'est ajoutee. Les outils
@@ -32,13 +34,8 @@ proxy ; leur execution depend du client ou de l'agent effectivement branche.
 
 Validation : protection et lancement verifies sur substituts WSGI et modules
 synthetiques sous Linux ; aucun essai Windows, Open WebUI ou API interne.
-Base projet : INSTALLATION_ET_FICHIERS_COMPLETS.md et lots Continue 1A/1B.
-References publiques, ponderation editoriale indicative (hors base projet) :
-40 % https://docs.openwebui.com/getting-started/quick-start/connect-a-provider/starting-with-openai-compatible/
-20 % https://docs.pylonsproject.org/projects/waitress/en/stable/usage.html
-15 % https://flask.palletsprojects.com/en/stable/patterns/streaming/
-15 % https://docs.python.org/3.12/library/wsgiref.html
-10 % https://docs.python.org/3.12/library/secrets.html
+Base projet : INSTALLATION_ET_FICHIERS_COMPLETS.md et lots Continue 1A/1B.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                options = ({"creationflags": subprocess.DETACHED_PROCESS}
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   if os.name == "nt" else {"start_new_session": True})
 """
 import argparse
 import json
@@ -62,6 +59,30 @@ def read_local_key(path):
     if len(key) < 32 or any(not 33 <= ord(c) <= 126 for c in key):
         raise ValueError("Cle locale invalide.")
     return key
+
+
+def model_labels(config):
+    """Decrire les alias depuis le mapping reel charge par le kit."""
+    return {alias: {"name": f"{model['family']} | {model['target']}",
+                    "upstream_model_id": model["target"], "family": model["family"]}
+            for alias, model in config.models.items()}
+
+
+def describe_models(application, labels):
+    """Ajouter les noms a la liste, sans changer les IDs ni les requetes chat."""
+    from flask import request
+
+    @application.after_request
+    def named_models(response):
+        if (request.method == "GET" and request.path == "/v1/models"
+                and response.status_code == 200 and response.is_json):
+            body = response.get_json()
+            for model in body.get("data", []):
+                model.update(labels.get(model.get("id"), {}))
+            response.set_data(json.dumps(body, ensure_ascii=True))
+        return response
+
+    return application
 
 
 class LocalBearer:
@@ -97,20 +118,27 @@ def main(argv=None):
     parser.add_argument("--port", type=int, default=5010)
     parser.add_argument("--copy-key", action="store_true",
                         help="Copier uniquement la cle locale dans le presse-papiers Windows.")
+    parser.add_argument("--list-models", action="store_true",
+                        help="Afficher alias, famille et ID amont configures, puis terminer sans appel API.")
     args = parser.parse_args(argv)
     if not 1024 <= args.port <= 65535:
         parser.error("--port doit etre compris entre 1024 et 65535.")
     try:
         from continue_kit.settings import KitError, load_config
-        from continue_kit.proxy import create_app
-        from waitress import serve
     except ImportError:
         raise SystemExit("Chargement impossible : fichier attendu a la racine du kit, "
                          "avec son Python et ses dependances deja installes.") from None
     try:
         config = load_config(args.env_file)
+        labels = model_labels(config)
+        if args.list_models:
+            print(json.dumps([{"alias": alias, **details} for alias, details in labels.items()],
+                             indent=2, ensure_ascii=True))
+            return
+        from continue_kit.proxy import create_app
+        from waitress import serve
         key = read_local_key(Path.home() / ".openwebui-relay" / "local.key")
-        application = LocalBearer(create_app(config), key)
+        application = LocalBearer(describe_models(create_app(config), labels), key)
         if args.copy_key:
             subprocess.run(["clip.exe"], input=key.encode("ascii"), check=True,
                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
@@ -121,6 +149,8 @@ def main(argv=None):
               expose_tracebacks=False)
     except KitError as error:
         raise SystemExit(str(error)) from None
+    except ImportError:
+        raise SystemExit("Dependances du relais absentes ; utiliser le Python du kit existant.") from None
     except KeyboardInterrupt:
         pass
     except Exception as error:
@@ -130,10 +160,7 @@ def main(argv=None):
 
 
 if __name__ == "__main__":
-    main()                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 command += [item for p in args.project for item in ("--project", p)]
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        options = ({"creationflags": subprocess.DETACHED_PROCESS}
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   if os.name == "nt" else {"start_new_session": True})
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   process = subprocess.Popen(command, cwd=ROOT, stdin=subprocess.DEVNULL,
+    main()                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  process = subprocess.Popen(command, cwd=ROOT, stdin=subprocess.DEVNULL,
                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      close_fds=True, **options)
                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  self.wait_ready(process, previous)
