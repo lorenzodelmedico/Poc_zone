@@ -1,4 +1,4 @@
-"""Deux outils MCP textuels ; brouillons dans la SQLite existante du projet."""
+"""Deux outils MCP textuels"""
 from copy import deepcopy
 from html import escape
 import json
