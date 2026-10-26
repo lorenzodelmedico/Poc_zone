@@ -1,169 +1,244 @@
-#!/usr/bin/env python3
-"""Point d'entree Open WebUI pour le proxy existant de continue_kit.
-
-Emplacement : racine du depot contenant continue_kit/, a cote du .env.
-Git Bash / Windows, avec le Python du kit deja configure :
-    ./.venv/Scripts/python.exe openwebui_relay.py --copy-key
-Configuration privee ailleurs : ajouter --env-file "C:/chemin/config/.env".
-Correspondances locales sans appel API : ajouter --list-models.
-
-Open WebUI installe avec pip sur le MEME poste :
-    Parametres > Administration > Connexions > OpenAI > Ajouter
-    URL        : http://127.0.0.1:5010/v1
-    Auth       : Bearer
-    Cle API    : coller la cle LOCALE copiee par --copy-key
-    Model IDs  : laisser vide ; /v1/models fournit les noms descriptifs
-    Connexion  : serveur/backend (connexion directe navigateur desactivee)
-Le terminal reste ouvert ; Ctrl+C arrete ce relais. --port change son port.
-
-Contrat reutilise : settings.load_config(env_file), proxy.create_app(config).
-Le proxy gere deja les certificats, l'acquisition/cache/renouvellement du jeton,
-le mapping des modeles, les erreurs et les reponses JSON/SSE. Aucun jeton amont
-n'est manipule ici. La protection locale intervient AVANT les hooks du proxy.
-La cle locale est conservee hors du depot : ~/.openwebui-relay/local.key.
-Sans --copy-key, son contenu peut etre copie depuis ce fichier local.
-Les noms affiches associent famille declaree et ID envoye a l'API (target).
-Les IDs des requetes restent les alias du kit. Aucune interrogation du serveur
-ne certifie ici les poids effectivement charges derriere un deploiement.
-
-Les hooks existants du proxy, dont un eventuel historique ConversationStore,
-restent actifs : aucune isolation de cet historique n'est ajoutee. Les outils
-MCP de Continue et l'orchestration Streamlit ne deviennent pas des outils Open
-WebUI par ce lancement. Les champs tools/tool_choice restent transmis par le
-proxy ; leur execution depend du client ou de l'agent effectivement branche.
-
-Validation : protection et lancement verifies sur substituts WSGI et modules
-synthetiques sous Linux ; aucun essai Windows, Open WebUI ou API interne.
-Base projet : INSTALLATION_ET_FICHIERS_COMPLETS.md et lots Continue 1A/1B.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                options = ({"creationflags": subprocess.DETACHED_PROCESS}
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   if os.name == "nt" else {"start_new_session": True})
-"""
-import argparse
+"Contrats Confluence REST" 
 import json
 import os
+from html.parser import HTMLParser
 from pathlib import Path
-import secrets
-import subprocess
+import re
+from urllib.parse import parse_qs, unquote, urlsplit
+from xml.etree import ElementTree
+
+from dotenv import dotenv_values
+import requests
+
+from .settings import ROOT, KitError, checked_url
+from .workspace import WorkflowError
 
 
-def read_local_key(path):
-    """Creer une cle locale une fois, sans toucher au .env ni aux acces API."""
-    path.parent.mkdir(parents=True, exist_ok=True)
-    try:
-        descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-    except FileExistsError:
-        pass
-    else:
-        with os.fdopen(descriptor, "w", encoding="ascii") as stream:
-            stream.write(secrets.token_urlsafe(32))
-    key = path.read_text(encoding="ascii").strip()
-    if len(key) < 32 or any(not 33 <= ord(c) <= 126 for c in key):
-        raise ValueError("Cle locale invalide.")
-    return key
+class PageText(HTMLParser):
+    def __init__(self, content):
+        super().__init__(convert_charrefs=True)
+        self.parts, self.headings, self.heading = [], [], None
+        self.hidden = 0
+        self.feed(content)
+        self.close()
+        self.text = "".join(self.parts)
 
-
-def model_labels(config):
-    """Decrire les alias depuis le mapping reel charge par le kit."""
-    return {alias: {"name": f"{model['family']} | {model['target']}",
-                    "upstream_model_id": model["target"], "family": model["family"]}
-            for alias, model in config.models.items()}
-
-
-def describe_models(application, labels):
-    """Ajouter les noms a la liste, sans changer les IDs ni les requetes chat."""
-    from flask import request
-
-    @application.after_request
-    def named_models(response):
-        if (request.method == "GET" and request.path == "/v1/models"
-                and response.status_code == 200 and response.is_json):
-            body = response.get_json()
-            for model in body.get("data", []):
-                model.update(labels.get(model.get("id"), {}))
-            response.set_data(json.dumps(body, ensure_ascii=True))
-        return response
-
-    return application
-
-
-class LocalBearer:
-    """Authentifier sans consommer le corps ni l'iterateur de reponse SSE."""
-
-    def __init__(self, application, key):
-        self.application = application
-        self.expected = ("Bearer " + key).encode("ascii")
-
-    def __call__(self, environ, start_response):
-        health = (environ.get("PATH_INFO") == "/health"
-                  and environ.get("REQUEST_METHOD") == "GET")
-        supplied = environ.get("HTTP_AUTHORIZATION", "").encode("utf-8")
-        if not health and not secrets.compare_digest(supplied, self.expected):
-            body = json.dumps({"error": {
-                "type": "authentication_error", "code": "local_auth_required",
-                "message": "Cle locale Open WebUI absente ou incorrecte."
-            }}).encode("utf-8")
-            start_response("401 Unauthorized", [
-                ("Content-Type", "application/json"),
-                ("Content-Length", str(len(body))),
-                ("WWW-Authenticate", "Bearer"), ("Cache-Control", "no-store")
-            ])
-            return [body]
-        forwarded = dict(environ)
-        forwarded.pop("HTTP_AUTHORIZATION", None)
-        return self.application(forwarded, start_response)
-
-
-def main(argv=None):
-    parser = argparse.ArgumentParser(description="Relais Open WebUI via continue_kit.")
-    parser.add_argument("--env-file", help="Le meme .env que le kit existant.")
-    parser.add_argument("--port", type=int, default=5010)
-    parser.add_argument("--copy-key", action="store_true",
-                        help="Copier uniquement la cle locale dans le presse-papiers Windows.")
-    parser.add_argument("--list-models", action="store_true",
-                        help="Afficher alias, famille et ID amont configures, puis terminer sans appel API.")
-    args = parser.parse_args(argv)
-    if not 1024 <= args.port <= 65535:
-        parser.error("--port doit etre compris entre 1024 et 65535.")
-    try:
-        from continue_kit.settings import KitError, load_config
-    except ImportError:
-        raise SystemExit("Chargement impossible : fichier attendu a la racine du kit, "
-                         "avec son Python et ses dependances deja installes.") from None
-    try:
-        config = load_config(args.env_file)
-        labels = model_labels(config)
-        if args.list_models:
-            print(json.dumps([{"alias": alias, **details} for alias, details in labels.items()],
-                             indent=2, ensure_ascii=True))
+    def handle_starttag(self, tag, attrs):
+        if tag in {"script", "style"}:
+            self.hidden += 1
+        if self.hidden:
             return
-        from continue_kit.proxy import create_app
-        from waitress import serve
-        key = read_local_key(Path.home() / ".openwebui-relay" / "local.key")
-        application = LocalBearer(describe_models(create_app(config), labels), key)
-        if args.copy_key:
-            subprocess.run(["clip.exe"], input=key.encode("ascii"), check=True,
-                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            print("Cle LOCALE copiee : collage dans le champ Cle API d'Open WebUI.", flush=True)
-        print(f"API Open WebUI : http://127.0.0.1:{args.port}/v1", flush=True)
-        print("Ctrl+C arrete ce relais.", flush=True)
-        serve(application, host="127.0.0.1", port=args.port, threads=config.threads,
-              expose_tracebacks=False)
-    except KitError as error:
-        raise SystemExit(str(error)) from None
-    except ImportError:
-        raise SystemExit("Dependances du relais absentes ; utiliser le Python du kit existant.") from None
-    except KeyboardInterrupt:
-        pass
-    except Exception as error:
-        raise SystemExit(f"Echec du relais ({type(error).__name__}). "
-                         "Verifier le port et le fichier de cle locale ; "
-                         "sans clip.exe, relancer sans --copy-key.") from None
+        if re.fullmatch(r"h[1-6]", tag):
+            self.parts.append("\n")
+            self.heading = {"level": int(tag[1]), "start": len("".join(self.parts)), "title": ""}
+        elif tag in {"p", "div", "li", "tr", "br", "pre"}:
+            self.parts.append("\n")
+        elif tag in {"td", "th"}:
+            self.parts.append("\t")
+
+    def handle_endtag(self, tag):
+        if tag in {"script", "style"}:
+            self.hidden = max(0, self.hidden - 1)
+            return
+        if self.hidden:
+            return
+        if re.fullmatch(r"h[1-6]", tag) and self.heading is not None:
+            self.parts.append("\n")
+            self.heading["body"] = len("".join(self.parts))
+            self.headings.append(self.heading)
+            self.heading = None
+        elif tag in {"p", "div", "li", "tr", "pre"}:
+            self.parts.append("\n")
+
+    def handle_data(self, data):
+        if not self.hidden:
+            self.parts.append(data)
+            if self.heading is not None:
+                self.heading["title"] += data
+
+    def unknown_decl(self, data):
+        if data.startswith("CDATA["):
+            self.handle_data(data[6:])
 
 
-if __name__ == "__main__":
-    main()                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  process = subprocess.Popen(command, cwd=ROOT, stdin=subprocess.DEVNULL,
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     close_fds=True, **options)
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 self.wait_ready(process, previous)
+def checked_content(content):
+    if not isinstance(content, str) or not content.strip():
+        raise WorkflowError("Contenu XHTML Confluence non vide requis.")
+    if "<!DOCTYPE" in content.upper() or "<!ENTITY" in content.upper():
+        raise WorkflowError("Déclaration XML non autorisée dans le contenu.")
+    try:
+        ElementTree.fromstring('<root xmlns:ac="http://atlassian.com/content" '
+                               'xmlns:ri="http://atlassian.com/resource/identifier">' + content + '</root>')
+    except ElementTree.ParseError:
+        raise WorkflowError("XHTML Confluence invalide ; échapper notamment les & et < du texte/code.") from None
+    return content
+
+
+class Confluence:
+    def __init__(self, env_file=None):
+        self.env_file = Path(env_file or ROOT / ".env").expanduser().resolve()
+        self.env = {**dotenv_values(self.env_file, interpolate=False, encoding="utf-8-sig"), **os.environ}
+        base = self.env.get("CONFLUENCE_BASE_URL", "")
+        try:
+            self.base = checked_url(base, "CONFLUENCE_BASE_URL").rstrip("/")
+        except (KitError, ValueError, TypeError):
+            raise WorkflowError("CONFLUENCE_BASE_URL invalide.") from None
+        self.origin = urlsplit(self.base)
+        ca = self.env.get("CA_BUNDLE", "")
+        if ca:
+            path = Path(ca).expanduser()
+            path = path if path.is_absolute() else self.env_file.parent / path
+            if not path.is_file():
+                raise WorkflowError("CA_BUNDLE ne désigne pas un fichier CA.")
+            self.verify = str(path.resolve())
+        else:
+            self.verify = True
+
+    def urls(self, name):
+        try:
+            items = json.loads(self.env.get(name) or "[]")
+        except (ValueError, TypeError):
+            raise WorkflowError(f"{name} : tableau JSON d’URL attendu.") from None
+        if not isinstance(items, list) or any(not isinstance(x, str) or not x.strip() for x in items):
+            raise WorkflowError(f"{name} : tableau JSON d’URL attendu.")
+        return list(dict.fromkeys(items))
+
+    def call(self, method, path, **kwargs):
+        try:
+            with requests.Session() as session:
+                # Comme API.call du collecteur : aucun auth='model' ou auth='data'.
+                response = session.request(method, self.base + path,
+                    headers={"Accept": "application/json"}, verify=self.verify,
+                    auth=lambda request: request, timeout=(10, 60), allow_redirects=False, **kwargs)
+                if not 200 <= response.status_code < 300:
+                    raise WorkflowError(f"Confluence : HTTP {response.status_code}.")
+                value = response.json()
+                if not isinstance(value, dict):
+                    raise ValueError
+                return value
+        except (requests.RequestException, ValueError) as exc:
+            raise WorkflowError("Confluence : " + type(exc).__name__ + ".") from None
+
+    def page(self, page_id):
+        if not str(page_id).isdigit():
+            raise WorkflowError("Identifiant de page Confluence invalide.")
+        page = self.call("GET", "/rest/api/content/" + str(page_id),
+                         params={"expand": "body.storage,version,space,ancestors", "status": "current"})
+        try:
+            page["body"]["storage"]["value"]
+            page["version"]["number"]
+            page["space"]["key"]
+            if page.get("type", "page") != "page":
+                raise KeyError
+        except (KeyError, TypeError):
+            raise WorkflowError("Réponse Confluence incomplète pour une page.") from None
+        return page
+
+    def resolve(self, url):
+        try:
+            u = urlsplit(url)
+            if (u.scheme, u.hostname, u.port) != (self.origin.scheme, self.origin.hostname, self.origin.port):
+                raise ValueError
+            if u.username or u.password or "\\" in url or any(c.isspace() for c in url):
+                raise ValueError
+            prefix = self.origin.path.rstrip("/")
+            if prefix and not u.path.startswith(prefix + "/"):
+                raise ValueError
+            path = u.path[len(prefix):]
+            ids = parse_qs(u.query).get("pageId", [])
+            if not ids:
+                match = re.search(r"/(?:pages|content)/(\d+)(?:/|$)", path)
+                ids = [match[1]] if match else []
+            if ids:
+                return self.page(ids[0])
+            if path.startswith("/display/"):
+                space, title = path[len("/display/"):].split("/", 1)
+                result = self.call("GET", "/rest/api/content", params={
+                    "spaceKey": unquote(space), "title": unquote(title.replace("+", " ")),
+                    "type": "page", "status": "current", "limit": 2})
+                if len(result.get("results", [])) == 1:
+                    return self.page(result["results"][0]["id"])
+        except (ValueError, TypeError, AttributeError):
+            pass
+        raise WorkflowError("URL de page de l’instance configurée requise ; utiliser le lien contenant pageId si nécessaire.")
+
+    def public(self, page):
+        return {"id": str(page["id"]), "title": page["title"],
+                "version": page["version"]["number"], "space": page["space"]["key"],
+                "url": self.base + "/pages/viewpage.action?pageId=" + str(page["id"])}
+
+    def read_many(self, urls=None, offset=0, limit=12000, format="text"):
+        if offset < 0 or not 1 <= limit <= 30000:
+            raise WorkflowError("offset >= 0 et 1 <= limit <= 30000 requis.")
+        if format not in {"text", "storage"}:
+            raise WorkflowError("format doit valoir text ou storage.")
+        urls = self.urls("CONFLUENCE_PAGE_URLS") if urls is None else urls
+        if not isinstance(urls, list) or any(not isinstance(url, str) for url in urls):
+            raise WorkflowError("urls doit être une liste d’URL.")
+        budget = max(1, limit // max(1, len(urls)))
+        results, seen = [], set()
+        for url in urls:
+            try:
+                page = self.resolve(url)
+                if str(page["id"]) in seen:
+                    continue
+                seen.add(str(page["id"]))
+                body = page["body"]["storage"]["value"]
+                text = body if format == "storage" else PageText(body).text
+                end = min(len(text), offset + budget)
+                results.append({**self.public(page), "content": text[offset:end],
+                                "format": format, "offset": offset, "total_chars": len(text),
+                                "next_offset": end if end < len(text) else None})
+            except WorkflowError as exc:
+                results.append({"url": url, "error": str(exc)})
+        return {"pages": results, "empty": not results}
+
+    def guides(self):
+        result, seen = [], set()
+        for url in self.urls("SCHEMA_TECHNIQUE_CONFLUENCE"):
+            try:
+                page = self.resolve(url)
+                if str(page["id"]) not in seen:
+                    result.append(self.public(page))
+                    seen.add(str(page["id"]))
+            except WorkflowError as exc:
+                result.append({"url": url, "error": str(exc)})
+        return result
+
+    def guide(self, url, section_titles=None):
+        page = self.resolve(url)
+        parsed = PageText(page["body"]["storage"]["value"])
+        headings = [h for h in parsed.headings if h["title"].strip() != page["title"].strip()]
+        if not headings:
+            if (not isinstance(section_titles, list) or not section_titles
+                    or any(not isinstance(t, str) or not t.strip() for t in section_titles)):
+                raise WorkflowError("Lire le guide avec confluence_pages, en déduire ses rubriques fidèlement, puis choose avec section_titles.")
+            return {**self.public(page), "instructions": parsed.text.strip(),
+                    "sections": [{"id": str(i), "title": title.strip(), "guidance": "", "content": None}
+                                 for i, title in enumerate(section_titles, 1)]}
+        level = min(h["level"] for h in headings)
+        if sum(h["level"] == 1 for h in headings) <= 1 and any(h["level"] == 2 for h in headings):
+            level = 2
+        headings = [h for h in headings if h["level"] == level]
+        sections = []
+        for i, h in enumerate(headings):
+            end = headings[i + 1]["start"] if i + 1 < len(headings) else len(parsed.text)
+            sections.append({"id": str(i + 1), "title": h["title"].strip(),
+                             "guidance": parsed.text[h["body"]:end].strip(), "content": None})
+        return {**self.public(page), "instructions": parsed.text[:headings[0]["start"]].strip(),
+                "sections": sections}
+
+    def write(self, draft, body):
+        payload = {"type": "page", "title": draft["title"],
+                   "body": {"storage": {"value": body, "representation": "storage"}}}
+        if draft.get("page_id"):
+            current = self.page(draft["page_id"])
+            if current["version"]["number"] != draft["version"]:
+                raise WorkflowError("Version distante modifiée ; relire la page et préparer une nouvelle proposition.")
+            payload["version"] = {"number": draft["version"] + 1}
+            return self.call("PUT", "/rest/api/content/" + draft["page_id"], json=payload)
+        payload.update(space={"key": draft["space"]}, ancestors=[{"id": draft["parent_id"]}])
+        return self.call("POST", "/rest/api/content", json=payload)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               self.wait_ready(process, previous)
                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              return True
                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      if not self.acquire():
                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  self.wait_ready()
