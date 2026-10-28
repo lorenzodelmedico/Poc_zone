@@ -1,3 +1,35 @@
+assignments = sp_client.get_file_role_assignments(
+    server_relative_url
+)
+
+print(f"\n--- BEFORE GROUP EXPANSION: {len(assignments)} assignments ---")
+
+for index, assignment in enumerate(assignments, 1):
+    member = assignment.get("Member", {})
+    bindings = assignment.get("RoleDefinitionBindings", [])
+
+    # SharePoint verbose JSON may wrap collections in "results".
+    if isinstance(bindings, dict):
+        bindings = bindings.get("results", [])
+
+    print({
+        "assignment": index,
+        "principal_id": member.get("Id"),
+        "metadata_type": member.get("__metadata", {}).get("type"),
+        "principal_type": member.get("PrincipalType"),
+        "roles": [role.get("Name") for role in bindings],
+    })
+
+# Existing processing remains unchanged.
+read_user_ids = sp_client.get_file_read_user_ids(
+    server_relative_url
+)
+
+
+
+
+
+
 """Deux outils MCP textuels ; brouillons dans la SQLite existante du projet."""
 from copy import deepcopy
 from html import escape
