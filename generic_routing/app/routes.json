@@ -1,0 +1,58 @@
+{
+  "schema_version": 3,
+  "framework": "semantic-router",
+  "framework_version": "1.1.2",
+  "aggregation": "max",
+  "top_k": 30,
+  "confidence_threshold": 0.85,
+  "routes": {
+    "profile": {
+      "description": "Consultation ou présentation des données personnelles déjà retournées par l’API pour la personne connectée : identité, poste actuel, contrat s’il est présent, organisation, historique professionnel et demandes de formation. Aucune règle RH, aucun droit, aucune éligibilité ni recommandation personnalisée à déduire. Une valeur absente de l’API reste indisponible.",
+      "confidence_threshold": 0.9,
+      "utterances": [
+        "Qui suis-je ?",
+        "Présente mon profil professionnel",
+        "Quelles informations sont connues sur moi ?",
+        "Quel est mon poste actuel ?",
+        "Quel intitulé de poste figure dans mon dossier ?",
+        "Résume mon parcours professionnel",
+        "Quels emplois ai-je occupés ?",
+        "Quel type de contrat figure dans mon profil ?",
+        "Quelles demandes de formation figurent dans mon dossier ?",
+        "Montre les informations de mon profil utilisateur"
+      ]
+    },
+    "documents": {
+      "description": "Recherche, explication, résumé ou comparaison dans les documents sélectionnés et autorisés, quel que soit leur sujet. Ne nécessite pas le profil personnel.",
+      "confidence_threshold": 0.85,
+      "utterances": [
+        "Résume ce document",
+        "Explique cette notion à partir des sources",
+        "Trouve les passages qui répondent à cette question",
+        "Compare les deux versions de ce document",
+        "Quelles étapes sont décrites dans cette procédure ?",
+        "Que disent les documents sur ce sujet ?",
+        "Quels critères figurent dans le dossier documentaire ?",
+        "Retrouve les recommandations dans les fichiers",
+        "Synthétise les informations présentes dans les documents",
+        "Recherche la réponse dans les sources sélectionnées"
+      ]
+    },
+    "mixed": {
+      "description": "Combiner les valeurs du profil de la personne connectée et les documents autorisés, indépendamment du sujet des sources. Le profil seul ne prouve aucune règle ni éligibilité.",
+      "confidence_threshold": 0.85,
+      "utterances": [
+        "Compare mon profil aux critères de ce document",
+        "Quelle disposition concerne ma situation personnelle ?",
+        "Présente mon profil et les possibilités décrites dans les sources",
+        "Applique cette procédure à ma situation",
+        "Quel critère du document correspond à mon poste ?",
+        "En fonction de mon parcours, quelles possibilités sont documentées ?",
+        "Fais le lien entre mon dossier personnel et cette règle",
+        "Mes informations correspondent-elles aux conditions décrites ?",
+        "Compare mes expériences aux exigences présentes dans le fichier",
+        "Explique les documents en tenant compte de mon profil"
+      ]
+    }
+  }
+}

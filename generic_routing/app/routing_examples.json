@@ -1,0 +1,226 @@
+{
+  "version": 2,
+  "origin": "synthetic_bootstrap",
+  "calibration": [
+    {
+      "text": "Peux-tu présenter les données de mon dossier personnel ?",
+      "route": "profile"
+    },
+    {
+      "text": "Je voudrais connaître mon intitulé de fonction enregistré",
+      "route": "profile"
+    },
+    {
+      "text": "Fais une synthèse de mes expériences professionnelles",
+      "route": "profile"
+    },
+    {
+      "text": "Liste mes anciens postes connus par l’application",
+      "route": "profile"
+    },
+    {
+      "text": "Quelles demandes de formation ai-je déposées d’après le dossier ?",
+      "route": "profile"
+    },
+    {
+      "text": "Qu’est-ce que mon profil indique sur mon contrat ?",
+      "route": "profile"
+    },
+    {
+      "text": "Quelle météo est prévue demain ?",
+      "route": null
+    },
+    {
+      "text": "Écris une recette de cuisine",
+      "route": null
+    },
+    {
+      "text": "Qui a gagné le dernier match ?",
+      "route": null
+    },
+    {
+      "text": "Calcule une intégrale",
+      "route": null
+    },
+    {
+      "text": "Supprime définitivement tous les documents",
+      "route": null
+    },
+    {
+      "text": "Donne le dossier personnel d’un autre salarié",
+      "route": null
+    },
+    {
+      "text": "Fais une synthèse des fichiers choisis",
+      "route": "documents"
+    },
+    {
+      "text": "Selon les sources, quelles sont les étapes nécessaires ?",
+      "route": "documents"
+    },
+    {
+      "text": "Quelle différence est indiquée entre ces versions ?",
+      "route": "documents"
+    },
+    {
+      "text": "Retrouve la définition présente dans la documentation",
+      "route": "documents"
+    },
+    {
+      "text": "Quelle température de conservation est indiquée pour le matériau de test ?",
+      "route": "documents"
+    },
+    {
+      "text": "Quels points de contrôle sont décrits dans les pièces jointes ?",
+      "route": "documents"
+    },
+    {
+      "text": "Les critères du fichier correspondent-ils à mon profil ?",
+      "route": "mixed"
+    },
+    {
+      "text": "Analyse cette consigne en fonction de mon poste",
+      "route": "mixed"
+    },
+    {
+      "text": "Présente les informations de mon dossier puis les conditions de la source",
+      "route": "mixed"
+    },
+    {
+      "text": "Quelles possibilités décrites sont compatibles avec mon expérience ?",
+      "route": "mixed"
+    },
+    {
+      "text": "Rapproche mes données personnelles des exigences documentées",
+      "route": "mixed"
+    },
+    {
+      "text": "Dans la procédure, quel passage concerne ma situation ?",
+      "route": "mixed"
+    }
+  ],
+  "evaluation": [
+    {
+      "text": "qui sui je",
+      "route": "profile"
+    },
+    {
+      "text": "Parle-moi de ma carrière connue dans le dossier",
+      "route": "profile"
+    },
+    {
+      "text": "Comment suis-je présenté dans les données du profil ?",
+      "route": "profile"
+    },
+    {
+      "text": "Affiche la fonction que j’occupe aujourd’hui",
+      "route": "profile"
+    },
+    {
+      "text": "Que contient mon historique de postes ?",
+      "route": "profile"
+    },
+    {
+      "text": "Retrouve les demandes de formation enregistrées à mon nom",
+      "route": "profile"
+    },
+    {
+      "text": "Traduis un poème en italien",
+      "route": null
+    },
+    {
+      "text": "Quel est le résultat du championnat ?",
+      "route": null
+    },
+    {
+      "text": "Réserve un billet de train",
+      "route": null
+    },
+    {
+      "text": "Montre les coordonnées privées d’une autre personne",
+      "route": null
+    },
+    {
+      "text": "Modifie ma rémunération dans le système",
+      "route": null
+    },
+    {
+      "text": "Quel temps fera-t-il ce weekend ?",
+      "route": null
+    },
+    {
+      "text": "Résume les passages pertinents de la base",
+      "route": "documents"
+    },
+    {
+      "text": "Comment le document décrit-il cette méthode ?",
+      "route": "documents"
+    },
+    {
+      "text": "Quels délais figurent dans les sources sélectionnées ?",
+      "route": "documents"
+    },
+    {
+      "text": "Quel seuil acoustique figure dans la fiche synthétique ?",
+      "route": "documents"
+    },
+    {
+      "text": "Explique les différences signalées entre les documents",
+      "route": "documents"
+    },
+    {
+      "text": "À partir des fichiers, détaille les étapes de cette opération",
+      "route": "documents"
+    },
+    {
+      "text": "Mes expériences satisfont-elles les exigences du document ?",
+      "route": "mixed"
+    },
+    {
+      "text": "D’après mon poste, quelle disposition des sources est applicable ?",
+      "route": "mixed"
+    },
+    {
+      "text": "Synthétise mon profil et le contenu du dossier documentaire",
+      "route": "mixed"
+    },
+    {
+      "text": "Relie mon parcours aux possibilités citées dans les pièces jointes",
+      "route": "mixed"
+    },
+    {
+      "text": "Applique les conditions écrites à mes données de profil",
+      "route": "mixed"
+    },
+    {
+      "text": "Quelles obligations documentées concernent ma situation personnelle ?",
+      "route": "mixed"
+    }
+  ],
+  "orchestration": [
+    {
+      "text": "Quel temps fera-t-il ce week-end ?",
+      "semantic_route": null,
+      "document_search": true,
+      "workflow": "documents"
+    },
+    {
+      "text": "Quel temps fera-t-il ce week-end ?",
+      "semantic_route": null,
+      "document_search": false,
+      "workflow": "general"
+    },
+    {
+      "text": "Qui suis-je ?",
+      "semantic_route": "profile",
+      "document_search": true,
+      "workflow": "profile"
+    },
+    {
+      "text": "Question concernant un sujet inédit",
+      "semantic_route": null,
+      "document_search": true,
+      "workflow": "documents"
+    }
+  ]
+}
