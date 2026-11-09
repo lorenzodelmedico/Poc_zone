@@ -1,0 +1,7 @@
+# Bornes de compatibilité ; créer un gel local après installation validée.
+fastapi>=0.115,<1
+uvicorn>=0.30,<1
+mcp>=1.12,<2
+psycopg[binary]>=3.2,<4
+sqlglot>=27,<29
+python-dotenv>=1.0,<2

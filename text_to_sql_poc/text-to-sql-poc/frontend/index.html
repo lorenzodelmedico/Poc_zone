@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>POC · Question vers SQL</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <script src="/static/vendor/echarts.min.js" defer></script>
+  <script src="/static/chart-options.js" defer></script>
+  <script src="/static/app.js" defer></script>
+</head>
+<body>
+  <main>
+    <p class="eyebrow">POC LOCAL · MCP · POSTGRESQL</p>
+    <h1>Explorer un indicateur</h1>
+    <p id="view-info">Chargement de la vue…</p>
+    <form id="query-form">
+      <label for="question">Question</label>
+      <textarea id="question" minlength="3" maxlength="4000" rows="3" required placeholder="Total des heures par catégorie sur l'année 2025"></textarea>
+      <div class="controls">
+        <span>Présentation choisie automatiquement à partir de la question.</span>
+        <button id="submit" type="submit" disabled>Analyser</button>
+      </div>
+    </form>
+    <p id="message" role="status" aria-live="polite"></p>
+    <p id="vendor-warning" hidden>ECharts n'est pas installé. Les résultats restent disponibles en tableau ; consulter l'étape 4 du guide.</p>
+    <section id="result" hidden>
+      <p id="chart-choice"></p>
+      <div id="chart" role="img" aria-label="Graphique des résultats"></div>
+      <p id="summary"></p>
+      <ul id="assumptions"></ul>
+      <div class="table-container">
+        <table><thead><tr><th id="x-label">Dimension</th><th id="y-label">Mesure</th></tr></thead><tbody id="rows"></tbody></table>
+      </div>
+      <details><summary>Requête SQL exécutée</summary><pre id="sql"></pre></details>
+    </section>
+  </main>
+</body>
+</html>

@@ -1,0 +1,22 @@
+:root { font-family: system-ui, sans-serif; color: #183347; background: #f2f6f9; }
+body { margin: 0; }
+main { max-width: 960px; margin: 45px auto; padding: 28px; background: #fff; border: 1px solid #dce6ed; border-radius: 12px; }
+.eyebrow { color: #487a94; font-size: 12px; letter-spacing: .13em; }
+h1 { margin: 8px 0 18px; font-size: 30px; }
+label { font-weight: 600; }
+textarea { box-sizing: border-box; display: block; width: 100%; margin-top: 8px; padding: 12px; border: 1px solid #a4b9c8; border-radius: 6px; font: inherit; }
+.controls { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-top: 14px; }
+button { font: inherit; padding: 9px 14px; border: 1px solid #a4b9c8; border-radius: 6px; }
+button { background: #155a77; color: white; cursor: pointer; }
+button:disabled { opacity: .55; cursor: wait; }
+#message { min-height: 24px; }
+#vendor-warning { padding: 12px; background: #fff1ce; }
+#chart { height: 370px; width: 100%; }
+.table-container { max-height: 300px; overflow: auto; }
+table { width: 100%; border-collapse: collapse; }
+th, td { padding: 10px; border-bottom: 1px solid #dce6ed; text-align: left; }
+th { position: sticky; top: 0; background: white; }
+details { margin-top: 20px; }
+summary { cursor: pointer; }
+pre { padding: 14px; overflow: auto; background: #f2f6f9; white-space: pre-wrap; }
+@media (max-width: 700px) { main { margin: 10px; padding: 18px; } }

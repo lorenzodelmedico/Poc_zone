@@ -1,0 +1,57 @@
+{
+  "catalog_version": "1.1",
+  "policy": "Choisir automatiquement une fiche compatible avec la question et les données. Respecter une présentation explicitement demandée si elle est compatible. Par défaut, une évolution temporelle utilise line ; une comparaison de catégories utilise bar. Demander une précision si une information d'analyse manque. Ne pas inventer de modèle hors catalogue.",
+  "charts": [
+    {
+      "id": "bar",
+      "label": "Barres de comparaison",
+      "description": "Comparer les valeurs numériques de groupes distincts. Les catégories occupent un axe et la longueur des barres représente la mesure. ECharts utilise une série de type bar. Le modèle de ce POC représente une seule mesure agrégée par catégorie.",
+      "use_when": [
+        "Comparer des catégories ou classer des groupes selon une mesure.",
+        "Présenter un total, une moyenne ou un comptage autorisé par groupe.",
+        "Des barres sont explicitement demandées pour des périodes : utiliser alors des libellés de dates triés."
+      ],
+      "avoid_when": [
+        "La demande cherche principalement une tendance temporelle sans imposer de barres : préférer line.",
+        "La demande nécessite plusieurs dimensions, plusieurs séries ou un nuage de points."
+      ],
+      "examples": [
+        "Comparer le total des heures par catégorie en 2025.",
+        "Quelles catégories ont le plus d'heures ?",
+        "Afficher en barres le total de chaque mois de 2025."
+      ],
+      "data_requirements": {"x": "Une dimension catégorielle ou une période", "y": "Une mesure numérique agrégée", "single_series": true},
+      "echarts": {"series_type": "bar", "x_axis_type": "category", "y_axis_type": "value"},
+      "sources": [
+        "https://echarts.apache.org/handbook/en/how-to/chart-types/bar/basic-bar/",
+        "https://echarts.apache.org/handbook/en/concepts/dataset/",
+        "https://echarts.apache.org/handbook/en/concepts/axis/"
+      ]
+    },
+    {
+      "id": "line",
+      "label": "Courbe temporelle",
+      "description": "Relier les valeurs numériques d'une série par une ligne. ECharts utilise une série de type line et permet plusieurs types d'axes. Pour ce POC, la courbe est volontairement limitée à une dimension temporelle avec un axe time et une seule mesure agrégée, afin de représenter une évolution.",
+      "use_when": [
+        "Montrer une évolution ou une tendance au fil du temps.",
+        "La demande précise une date de référence et une granularité telle que jour, mois, trimestre ou année, ou les règles métier les définissent."
+      ],
+      "avoid_when": [
+        "Les groupes sont des catégories sans ordre temporel : utiliser bar.",
+        "La date de référence ou la granularité manque et aucune règle métier ne la définit : demander une précision.",
+        "La demande nécessite plusieurs séries ou plusieurs mesures."
+      ],
+      "examples": [
+        "Comment les heures ont-elles évolué chaque mois en 2025 ?",
+        "Montrer la tendance annuelle des heures sur toute la période disponible."
+      ],
+      "data_requirements": {"x": "Date ou horodatage, brut ou issu de DATE_TRUNC ; conserver un type temporel en SQL", "y": "Une mesure numérique agrégée", "single_series": true},
+      "echarts": {"series_type": "line", "x_axis_type": "time", "y_axis_type": "value"},
+      "sources": [
+        "https://echarts.apache.org/handbook/en/how-to/chart-types/line/basic-line/",
+        "https://echarts.apache.org/handbook/en/concepts/axis/",
+        "https://echarts.apache.org/handbook/en/concepts/dataset/"
+      ]
+    }
+  ]
+}

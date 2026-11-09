@@ -1,0 +1,40 @@
+{
+  "view": {
+    "schema": "public",
+    "name": "v_metric_demo",
+    "description": "EXEMPLE SYNTHÉTIQUE : heures délivrées par participation à une formation.",
+    "grain": "Une ligne correspond à une participation fictive ; les heures ne sont pas répétées sur plusieurs lignes."
+  },
+  "columns": [
+    {
+      "name": "category",
+      "type": "text",
+      "description": "Catégorie de formation. Valeurs fictives : A et B.",
+      "role": "dimension",
+      "allowed_aggregations": []
+    },
+    {
+      "name": "event_date",
+      "type": "date",
+      "description": "Date de réalisation de la formation ; date de référence pour une période.",
+      "role": "dimension",
+      "allowed_aggregations": []
+    },
+    {
+      "name": "measure",
+      "type": "numeric",
+      "description": "Nombre d'heures délivrées pour cette participation fictive.",
+      "role": "measure",
+      "allowed_aggregations": ["SUM", "AVG", "MIN", "MAX"]
+    }
+  ],
+  "allow_count_rows": false,
+  "business_rules": [
+    "Les exemples sont entièrement synthétiques et ne décrivent aucun système réel.",
+    "Les heures sont additives par catégorie et par période dans ce jeu fictif.",
+    "La date de référence est event_date. Une année correspond à l'année civile.",
+    "En l'absence de période, utiliser tout l'historique disponible et indiquer cette hypothèse.",
+    "La notion de formation récente n'a pas de définition : demander une période.",
+    "Aucun filtre de statut, de contrat ou de population n'est disponible."
+  ]
+}
