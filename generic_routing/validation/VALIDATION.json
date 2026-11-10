@@ -1,0 +1,18 @@
+{
+  "tests_passed": 27,
+  "tests_run_including_skipped_module": 27,
+  "skipped_modules": 0,
+  "failures": 0,
+  "errors": 0,
+  "compile_ok": true,
+  "test_kind": "synthetic_consolidated_workflows_and_sqlite_permission_refresh",
+  "framework_version_declared": "1.1.2",
+  "native_framework_executed_this_revision": false,
+  "dependency_installation": "Package installation and GitHub fetch blocked in preparation environment",
+  "internal_embedding_api_tested": false,
+  "live_mlflow_server_tested": false,
+  "existing_sharepoint_indexer_connected": false,
+  "live_streamlit_ui_tested": false,
+  "configuration_sha256": "e67be4e02d775bccbe4c7d1a803cb8994b32554fcd8f66989c1a7e48fe76b258",
+  "dataset_sha256": "39f220f2140c1bc85aed700dcf6c3754f06d0de79b4c702e669ffa0f7ab110a9"
+}
