@@ -1,19 +1,15 @@
-Proceed with the validation phase. Do not introduce new features or refactor the architecture further.
+The audit correctly identifies the monolithic retrieval regression. Proceed with the correction, but adjust the implementation strategy:
 
-First, inspect the actual implementation in "app/agent.py" and verify that the changes are correctly integrated into the existing execution flow.
+1. Do not simply move "get_context()" inside the profile workflow. This would preserve expensive monolithic retrieval for profile requests. Replace it with selective retrieval through the specialized MCP tools.
 
-Pay particular attention to:
+2. For "Qui suis-je ?", reuse the lightweight authenticated user context already cached in the application session. Return a deterministic formatted response without LLM or MCP calls. If this context is unavailable, use the minimum required profile operation, never the full monolithic retrieval.
 
-1. Whether the initial "get_context()" still performs expensive monolithic retrieval before dynamic tool selection.
-2. Whether "Qui suis-je ?" really requires zero LLM and zero MCP calls when session context is available, including final generation.
-3. Whether native tool selection, parallel MCP execution and final generation work end-to-end.
-4. Whether semantic routing, authorization, verification and MLflow tracking remain functional.
-5. Whether concurrent MCP calls and partial failures are handled correctly.
+3. Ensure removing the eager "get_context()" call does not break other workflows that depend on user identity or authorization.
 
-Then execute integration tests using representative queries.
+4. Run real end-to-end tests through the application entry point, including semantic routing, tool selection, MCP execution, generation, verification and MLflow instrumentation.
 
-Measure actual latency per step, number of LLM/MCP calls, token consumption and payload sizes. Compare against the previous implementation whenever baseline measurements are available.
+5. Measure actual LLM calls, MCP calls, API calls, payload size, tokens and latency per step. Do not assume fixed call counts before execution.
 
-Report PASS/FAIL for each scenario, provide measured results and correct any confirmed regressions.
+6. Verify that parallel MCP calls preserve session identity and that partial failures cannot bypass verification.
 
-Do not declare performance improvements without measurements. Do not modify unrelated workflows.
+Apply the minimal changes required. Preserve existing functionality and report PASS/FAIL with measured results.
