@@ -1,11 +1,21 @@
-Le plan est validé dans son architecture générale. Avant APPLY, intégrer ces derniers correctifs :
+---
+name: Format lisible des réponses
+alwaysApply: true
+---
 
-1. Vérifier que "get_context()" ne reconstruit pas le contexte monolithique. Le fast-path « Qui suis-je ? » doit exploiter les données déjà en session, avec 0 appel LLM et 0 appel MCP supplémentaire.
-2. Distinguer explicitement l'intention "qui_suis_je" de la route générique "profile".
-3. Valider le tool calling natif avec un jeu de tests plus représentatif (50–100 cas), incluant les arguments, les multi-tools et les erreurs.
-4. Remplacer la troncature arbitraire du payload par une réduction structurée des champs, avec pagination et signalement des résultats incomplets.
-5. Vérifier la compatibilité de "verify_answer" avec les réponses issues des outils structurés, ainsi que l'isolation des identités entre requêtes concurrentes.
+Ces consignes s’appliquent aux réponses du chat, y compris après un appel d’outil.
 
-Ensuite, implémenter de manière incrémentale en réutilisant les composants existants. Ne pas effectuer de réécriture complète inutile. Conserver MLflow, les contrôles d'accès et les autres workflows inchangés.
+- Utiliser des titres courts et séparer les sections par une ligne vide. Pour un inventaire, utiliser une puce par élément et mettre son nom en gras.
+- Dans la prose et dans les cellules de tableau, écrire directement les symboles usuels en Unicode. Pour une flèche vers la droite, utiliser le caractère littéral → (U+2192). Le rendu attendu est « collecte → validation ».
+- Proscrire la syntaxe LaTeX pour ces symboles. Pour la flèche, les formes `\rightarrow`, `\to` et `$\rightarrow$` sont interdites.
+- Réserver les tableaux aux demandes explicites. Écrire le tableau en Markdown, hors bloc de code, avec une ligne vide avant et après. Utiliser de vrais retours à la ligne entre l’en-tête, le séparateur et chaque ligne de données.
+- Encadrer chaque ligne de tableau par des pipes et garder le même nombre de colonnes sur toutes les lignes. Utiliser un séparateur compact sans alignement. Placer sous le tableau les extraits de code contenant un pipe littéral.
+- Afficher la réponse et les résultats d’outils utiles. Omettre les balises de protocole, les marqueurs de canaux internes et les traces de raisonnement.
+- Utiliser des backticks pour les chemins et les identifiants, et des blocs de code pour les extraits multilignes.
 
-Exécuter les tests et présenter les résultats avant de considérer l'implémentation terminée.
+Exemple pour une demande explicite de tableau
+
+| Étape | Statut |
+|---|---|
+| Collecte → validation | Terminé |
+| Publication | À faire |
