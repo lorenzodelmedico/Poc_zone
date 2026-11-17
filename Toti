@@ -1,0 +1,51 @@
+STOP the current implementation and fallback decision.
+
+The tool-calling validation script is methodologically invalid. The reported 0% accuracy does not establish that Gemma 4 cannot perform native tool calling.
+
+The objective is to diagnose and correct the test, not change the architecture.
+
+1. Diagnose the current test
+
+Inspect the existing validation script, the LLM client, the MCP session integration and the proxy response handling.
+
+Explain:
+
+- Whether "api.llm(..., tools=...)" actually forwards tool schemas.
+- Whether the proxy returns structured "tool_calls".
+- Whether the generator preserves or discards this information.
+- Why 90 calls complete in approximately 1.6 seconds.
+- Which exceptions occur, grouped by error class.
+
+Do not hide exceptions behind an aggregate accuracy score.
+
+2. Correct the validation methodology
+
+- Obtain actual MCP schemas through "session.list_tools()", not manually duplicated descriptions.
+- First validate a single native tool call end-to-end through the existing proxy.
+- Parse structured tool calls, including tool names and JSON arguments, rather than searching for names in response text.
+- Distinguish transport errors, unsupported tool calling, invalid arguments and incorrect tool selection.
+- Remove "TEST_CASES * 10". Build genuinely distinct test cases.
+- Use synthetic data and sanitized diagnostics.
+
+3. Respect the routing architecture
+
+Keep the existing "semantic_router" as the top-level entry point.
+
+Create two separate evaluations:
+
+- Tool-selection evaluation with the "profile" workflow already selected.
+- End-to-end evaluation covering semantic routing, tool selection, execution and response generation.
+
+The deterministic "Qui suis-je ?" fast-path must be evaluated separately, with zero LLM and MCP calls when the session context is already available.
+
+4. Do not prematurely introduce a JSON Planner fallback
+
+First establish whether native tool calling actually fails, whether the proxy/client adapter is responsible, or whether the validation code is incorrect.
+
+Only compare native tool calling against structured JSON selection after both paths have been proven functional.
+
+Expected output
+
+First provide a concise root-cause report with evidence from the existing code, the exact functions requiring correction, and the corrected test strategy.
+
+Do not modify the production workflow yet. Do not create unnecessary files or introduce new frameworks.
