@@ -1,51 +1,24 @@
-STOP the current implementation and fallback decision.
+The native tool-calling validation demonstrates that the mechanism is functional. Proceed with the Dynamic Profile Workflow implementation.
 
-The tool-calling validation script is methodologically invalid. The reported 0% accuracy does not establish that Gemma 4 cannot perform native tool calling.
+However, the main objective remains end-to-end performance optimization, not just tool-selection accuracy.
 
-The objective is to diagnose and correct the test, not change the architecture.
+Implementation priorities:
 
-1. Diagnose the current test
+1. Integrate the existing semantic router with native tool calling and real FastMCP metadata.
+2. Replace monolithic user-context retrieval with selective MCP calls. Avoid fetching unnecessary data or rebuilding the full context.
+3. Preserve deterministic fast-paths with zero LLM calls when the required information is already available in the authenticated session.
+4. Execute independent tools concurrently and minimize structured MCP outputs before final generation.
+5. Preserve authorization, verification and existing MLflow instrumentation.
 
-Inspect the existing validation script, the LLM client, the MCP session integration and the proxy response handling.
+Performance validation is mandatory:
 
-Explain:
+- Measure p50/p95 latency for routing, tool selection, MCP execution, generation and verification.
+- Track LLM calls, MCP calls, input/output tokens and payload size.
+- Compare the new workflow against the previous implementation using equivalent requests.
+- Report accuracy separately from latency and token consumption.
 
-- Whether "api.llm(..., tools=...)" actually forwards tool schemas.
-- Whether the proxy returns structured "tool_calls".
-- Whether the generator preserves or discards this information.
-- Why 90 calls complete in approximately 1.6 seconds.
-- Which exceptions occur, grouped by error class.
+Before optimizing prompts, verify that benchmark labels match the actual semantic scope of each tool. Ensure that repeated test cases are not counted as independent evaluations.
 
-Do not hide exceptions behind an aggregate accuracy score.
+Proceed incrementally, reusing the existing architecture. Do not introduce LangGraph, a JSON Planner or unnecessary abstractions.
 
-2. Correct the validation methodology
-
-- Obtain actual MCP schemas through "session.list_tools()", not manually duplicated descriptions.
-- First validate a single native tool call end-to-end through the existing proxy.
-- Parse structured tool calls, including tool names and JSON arguments, rather than searching for names in response text.
-- Distinguish transport errors, unsupported tool calling, invalid arguments and incorrect tool selection.
-- Remove "TEST_CASES * 10". Build genuinely distinct test cases.
-- Use synthetic data and sanitized diagnostics.
-
-3. Respect the routing architecture
-
-Keep the existing "semantic_router" as the top-level entry point.
-
-Create two separate evaluations:
-
-- Tool-selection evaluation with the "profile" workflow already selected.
-- End-to-end evaluation covering semantic routing, tool selection, execution and response generation.
-
-The deterministic "Qui suis-je ?" fast-path must be evaluated separately, with zero LLM and MCP calls when the session context is already available.
-
-4. Do not prematurely introduce a JSON Planner fallback
-
-First establish whether native tool calling actually fails, whether the proxy/client adapter is responsible, or whether the validation code is incorrect.
-
-Only compare native tool calling against structured JSON selection after both paths have been proven functional.
-
-Expected output
-
-First provide a concise root-cause report with evidence from the existing code, the exact functions requiring correction, and the corrected test strategy.
-
-Do not modify the production workflow yet. Do not create unnecessary files or introduce new frameworks.
+After implementation, provide measured before/after results and identify the remaining performance bottlenecks.
