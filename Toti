@@ -1,24 +1,19 @@
-The native tool-calling validation demonstrates that the mechanism is functional. Proceed with the Dynamic Profile Workflow implementation.
+Proceed with the validation phase. Do not introduce new features or refactor the architecture further.
 
-However, the main objective remains end-to-end performance optimization, not just tool-selection accuracy.
+First, inspect the actual implementation in "app/agent.py" and verify that the changes are correctly integrated into the existing execution flow.
 
-Implementation priorities:
+Pay particular attention to:
 
-1. Integrate the existing semantic router with native tool calling and real FastMCP metadata.
-2. Replace monolithic user-context retrieval with selective MCP calls. Avoid fetching unnecessary data or rebuilding the full context.
-3. Preserve deterministic fast-paths with zero LLM calls when the required information is already available in the authenticated session.
-4. Execute independent tools concurrently and minimize structured MCP outputs before final generation.
-5. Preserve authorization, verification and existing MLflow instrumentation.
+1. Whether the initial "get_context()" still performs expensive monolithic retrieval before dynamic tool selection.
+2. Whether "Qui suis-je ?" really requires zero LLM and zero MCP calls when session context is available, including final generation.
+3. Whether native tool selection, parallel MCP execution and final generation work end-to-end.
+4. Whether semantic routing, authorization, verification and MLflow tracking remain functional.
+5. Whether concurrent MCP calls and partial failures are handled correctly.
 
-Performance validation is mandatory:
+Then execute integration tests using representative queries.
 
-- Measure p50/p95 latency for routing, tool selection, MCP execution, generation and verification.
-- Track LLM calls, MCP calls, input/output tokens and payload size.
-- Compare the new workflow against the previous implementation using equivalent requests.
-- Report accuracy separately from latency and token consumption.
+Measure actual latency per step, number of LLM/MCP calls, token consumption and payload sizes. Compare against the previous implementation whenever baseline measurements are available.
 
-Before optimizing prompts, verify that benchmark labels match the actual semantic scope of each tool. Ensure that repeated test cases are not counted as independent evaluations.
+Report PASS/FAIL for each scenario, provide measured results and correct any confirmed regressions.
 
-Proceed incrementally, reusing the existing architecture. Do not introduce LangGraph, a JSON Planner or unnecessary abstractions.
-
-After implementation, provide measured before/after results and identify the remaining performance bottlenecks.
+Do not declare performance improvements without measurements. Do not modify unrelated workflows.
