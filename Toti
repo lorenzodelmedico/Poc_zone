@@ -1,66 +1,138 @@
-APPLY — correction de la collecte SharePoint.
+MISSION : réparer les deux parcours SharePoint de l’application RAG après un correctif incomplet.
 
-Le principe du plan est validé avec les ajustements ci-dessous. Procéder à l’implémentation puis aux tests, sans nouveau cycle de planification. Respecter les instructions du dépôt et vérifier le code actuel avant modification.
+Analyser le code actuel, reproduire les erreurs, appliquer les corrections ciblées et exécuter les tests accessibles. L’implémentation est autorisée. Ne pas recommencer une refonte générale ni s’arrêter à un nouveau plan.
 
-CONTEXTE À CONSERVER
+CONTEXTE FONCTIONNEL
 
-L’application RAG possède deux entrées : ajout de source dans le chat et interface d’exploration/indexation SharePoint.
+L’utilisateur final fournit uniquement un lien SharePoint, copié dans la barre d’adresse ou via « Copier le lien ».
 
-Actuellement :
-- Chat : TypeError lors de l’ajout d’un lien.
-- Autre interface : attempted relative import with no known parent package.
-- Site de test codé en dur.
-- Résolution des liens et collecte récursive insuffisantes.
+Comportement attendu :
+- Fichier : ce document uniquement.
+- Dossier : tous ses documents et sous-dossiers récursivement.
+- Bibliothèque : son contenu récursif.
+- Convention pour un site seul : ses bibliothèques documentaires accessibles et non masquées, sans exploration automatique des autres sites/sous-sites.
+- Plusieurs sites doivent fonctionner sans URL de test codée en dur.
+- Le backend résout les liens avec les API SharePoint disponibles, sans appel LLM.
+- L’indexeur, les traitements documentaires et les droits existants sont conservés.
 
-Besoin :
-- Un fichier désigne uniquement ce fichier.
-- Un dossier désigne tous ses documents et sous-dossiers, sans limite fonctionnelle de profondeur.
-- Une bibliothèque désigne son contenu récursif.
-- Convention pour un site seul : ses bibliothèques documentaires accessibles et non masquées, sans parcours automatique des autres sites/sous-sites.
-- Accepter les liens de barre d’adresse et « Copier le lien » lorsque les API disponibles permettent leur résolution.
-- Conserver l’indexeur existant, ses filtres et ses métadonnées de droits.
+ÉTAT DÉCLARÉ DU PRÉCÉDENT CORRECTIF — À VÉRIFIER
 
-AJUSTEMENTS OBLIGATOIRES
+Création de :
+- app/services/sharepoint/resolver.py : SharePointLinkResolver.
 
-1. Une seule implémentation de chaque responsabilité.
-SharePointClient reste le client HTTP/API.
-Le resolver centralise la résolution et pilote l’énumération.
-Les deux interfaces rejoignent cette même chaîne.
-Remplacer les anciennes branches SharePoint concurrentes ; supprimer leur code devenu inutile après vérification des appelants. Aucun fallback vers l’ancien comportement cassé. Un éventuel wrapper de compatibilité doit seulement déléguer.
+Modifications de :
+- app/sharepoint_client.py : suppression du site par défaut, ajout de set_site_context, résolution par identifiants.
+- app/sources.py : collect_source délègue au resolver.
+- app/ui.py : correction de certains imports relatifs.
 
-2. Examiner notamment validate_source_url et collect_source.
-La validation ne doit pas supprimer les paramètres nécessaires avant résolution. Ne pas résoudre ou parcourir deux fois la même source entre validation et collecte.
+Ce correctif a été annoncé comme terminé après vérification syntaxique et lecture du flux logique. Le test dans l’application échoue toujours.
 
-3. Ne pas limiter l’identification du Web à /sites/<nom>.
-Déterminer le Web propriétaire avec les mécanismes disponibles, y compris pour les sous-sites. Aucun retour implicite au site de test.
-Utiliser un contexte explicite ou un client lié au site du traitement ; ne pas modifier le site d’un client partagé entre traitements.
+DEUX PROBLÈMES À TRAITER
 
-4. Respecter le contrat réel de l’indexeur.
-« Liste d’URL canoniques » ne suffit pas à définir ce contrat.
-Vérifier les types et les champs transmis, notamment URL absolue contre chemin serveur relatif, identité du document, provenance et droits.
+A. Explorateur SharePoint
 
-5. Établir la cause exacte du TypeError pendant l’application.
-L’explication « peut survenir si le contrat est rompu » reste une hypothèse. Identifier l’appel fautif et les types reçus.
-Corriger les imports concernés selon le lancement réel, sans remplacement global injustifié ni bricolage de sys.path.
+Erreur observée :
+RuntimeError: SharePoint site context not set
 
-6. Traiter toutes les pages de résultats et tous les sous-dossiers.
-Prévenir les doublons, rester dans le périmètre demandé et signaler tout parcours incomplet.
-Vérifier les capacités disponibles pour GUID, liens de partage et caractères particuliers. Un format non résoluble doit produire un motif explicite.
+Selon les extraits précédents, sharepoint_browser_view crée :
+    SharePointClient(api_client=client)
 
-VALIDATION
+puis appelle get_folder_contents sans initialiser le site. Le resolver initialise son propre contexte, mais l’explorateur utilise directement le client.
 
-Tester les deux entrées jusqu’à un indexeur simulé :
-- Fichier seul ; dossier profond ; pagination.
-- Deux sites distincts et deux dossiers voisins dans un même site.
-- Paramètres de navigation conservés et encodages.
-- Erreurs HTTP et parcours partiel.
-- Absence de régression Confluence/OneNote.
+Vérifier ce chemin dans le code actuel et rechercher toutes les instanciations et tous les usages de SharePointClient concernés par le changement de contrat.
 
-Vérifier les documents effectivement transmis, pas seulement l’absence d’exception.
-Vérifier aussi que les deux interfaces utilisent la même résolution et qu’aucune ancienne branche concurrente ne subsiste.
+B. Ajout depuis le chat
 
-GESTION DU CONTEXTE
+L’interface affiche seulement :
+« Ajout de la source impossible : TypeError »
 
-Effectuer des lectures ciblées et éviter de recopier fichiers ou longs logs dans la conversation.
-Terminer par un bilan bref : fichiers modifiés, anciennes branches retirées, tests exécutés, limites et éventuels travaux restants. Ce bilan doit permettre une reprise dans une nouvelle conversation.
-Distinguer les tests simulés des vérifications réellement effectuées contre SharePoint.
+Fonctions à examiner :
+- app/ui.py : document_skill_view et son traitement d’exception.
+- app/sync.py : enqueue_source_sync, validate_source_url, _source_jobs_parts, _source_jobs_run, Synchronizer.index_from_chat et Synchronizer.once.
+- app/sources.py : collect_source.
+
+La cause exacte n’a pas été démontrée.
+
+ATTENTION : DEUX EXPLICATIONS ANTÉRIEURES SONT ERRONÉES
+
+Les extraits suivants sont compatibles :
+    index_existing = synchronizer.index_from_chat
+    def index_from_chat(self, user_id, url, report): ...
+    index_existing(user_id, url, report)
+
+Si synchronizer est bien une instance et le callback une méthode liée, self est déjà fourni automatiquement. Ne pas ajouter self ni modifier la signature sur cette seule base.
+
+De même, None.strip() produit un AttributeError. Cette hypothèse n’explique pas à elle seule le TypeError observé.
+
+TRAVAIL DEMANDÉ
+
+1. Établir les erreurs réellement exécutées.
+
+Vérifier le lancement prévu dans le dépôt et que l’application charge effectivement les fichiers modifiés.
+
+Retrouver ou ajouter une trace d’exception exploitable à l’endroit où elle est actuellement réduite au nom de sa classe : fichier, fonction, ligne, message nettoyé et cause initiale. Couvrir aussi les erreurs du traitement en arrière-plan et leur remontée dans le suivi du job existant.
+
+Conserver les diagnostics localement, sans secrets, URL internes brutes ni contenu documentaire. Réutiliser la journalisation existante.
+
+Identifier la ligne qui lève réellement le TypeError avant d’en annoncer la cause. Examiner le callable effectivement transmis et sa signature si nécessaire ; ne pas exécuter une seconde fois une opération d’indexation pour vérifier sa signature.
+
+2. Corriger l’initialisation du client.
+
+Garantir que chaque opération SharePoint dispose du contexte du bon site avant son premier appel réseau.
+
+Le contexte doit provenir du lien utilisateur ou d’une configuration explicite existante. Aucun retour silencieux au site de test et aucune mutation d’un client partagé entre traitements.
+
+Si l’explorateur démarre sans cible ni configuration suffisante, afficher un état invitant simplement à fournir un lien, plutôt que déclencher un appel avec un client incomplet.
+
+Distinguer :
+- Navigation dans l’explorateur : afficher les enfants directs avec le client correctement configuré.
+- Indexation : utiliser la résolution commune et le parcours récursif.
+
+Ne pas déclencher une collecte récursive complète pour simplement ouvrir un dossier dans l’explorateur.
+
+3. Corriger le défaut du chat à sa source.
+
+Respecter le contrat réel entre interface, validation, job, callback et collecte.
+
+Ne pas masquer le défaut avec un ajout de self, des paramètres rendus arbitrairement optionnels, *args/**kwargs ou une conversion systématique str(url).
+
+Ne pas intercepter un TypeError pour retenter le callback avec d’autres arguments : l’exception peut venir de son corps et l’opération pourrait être exécutée plusieurs fois.
+
+Conserver le lien et les paramètres nécessaires jusqu’à leur résolution. Vérifier que les transformations utilisées pour comparer les autorisations ne remplacent pas le chemin réel envoyé à SharePoint.
+
+4. Conserver une seule logique SharePoint.
+
+Réparer le resolver et le client existants. Ne pas créer un second connecteur, un autre resolver ou un fallback vers l’ancienne collecte cassée.
+
+Les deux actions d’indexation doivent rejoindre la même résolution. Les appels HTTP restent centralisés dans SharePointClient. Les anciennes branches concurrentes devenues inutiles doivent être retirées après vérification de leurs appelants.
+
+PRÉUVES DE VALIDATION ATTENDUES
+
+Exécuter des tests de régression qui passent par les fonctions réellement utilisées :
+- Initialisation et premier appel de l’explorateur.
+- Ajout depuis le chat, validation, traitement du job et callback réel.
+- Transmission des bons documents à un indexeur simulé.
+- Fichier seul ; dossier récursif avec pagination ; deux sites distincts.
+- Échec dans le traitement : cause conservée, statut d’échec visible, aucune seconde exécution automatique.
+
+Simuler les services externes, sans remplacer par des mocks permissifs les fonctions internes dont les contrats sont précisément à vérifier. Les doubles doivent respecter les signatures réelles.
+
+Préserver Confluence, OneNote et le pipeline RAG existant.
+
+Une compilation ou une vérification syntaxique ne suffit pas à annoncer le fonctionnement. Distinguer source acceptée, job démarré et indexation terminée.
+
+Si l’exécution réelle de l’application ou l’accès SharePoint est impossible avec les outils disponibles, terminer les corrections et tests accessibles, préciser cette limite et fournir un seul scénario manuel court permettant la validation restante.
+
+GESTION DU CONTEXTE ET LIVRABLE
+
+Lectures ciblées, sorties courtes, aucun déversement de fichiers ou de logs.
+Pas de nouveau cycle de validation pour les choix d’implémentation courants.
+
+Bilan final bref :
+- Cause démontrée de chaque erreur, ou point encore non établi.
+- Fichiers et contrats corrigés.
+- Commandes/tests réellement exécutés et résultats.
+- Branches concurrentes retirées.
+- Vérification réelle restant éventuellement à effectuer.
+
+Ne pas déclarer « résolu » sur la seule base d’une analyse du code.
