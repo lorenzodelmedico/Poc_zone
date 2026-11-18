@@ -1,101 +1,66 @@
-Mode AGENT / APPLY.
+APPLY — correction de la collecte SharePoint.
 
-Appliquer le plan de prise en charge des images, avec les corrections
-ci-dessous. Rester strictement dans le périmètre de cette fonctionnalité.
+Le principe du plan est validé avec les ajustements ci-dessous. Procéder à l’implémentation puis aux tests, sans nouveau cycle de planification. Respecter les instructions du dépôt et vérifier le code actuel avant modification.
 
-1. Vérifications ciblées avant modification
+CONTEXTE À CONSERVER
 
-Vérifier dans le code :
-- le format multimodal réellement accepté par le client LLM existant ;
-- comment chaque parser accède aux images ;
-- comment les métadonnées passent de Block aux chunks, au stockage,
-  puis aux outils MCP de recherche et de lecture ;
-- comment une source déjà indexée peut être retraitée.
+L’application RAG possède deux entrées : ajout de source dans le chat et interface d’exploration/indexation SharePoint.
 
-La capacité de Gemma à analyser une image a déjà été observée.
-Le point à vérifier est sa disponibilité depuis le chemin d’ingestion.
-Ne pas inventer un endpoint ou un format de payload.
+Actuellement :
+- Chat : TypeError lors de l’ajout d’un lien.
+- Autre interface : attempted relative import with no known parent package.
+- Site de test codé en dur.
+- Résolution des liens et collecte récursive insuffisantes.
 
-2. Récupération et parsing
+Besoin :
+- Un fichier désigne uniquement ce fichier.
+- Un dossier désigne tous ses documents et sous-dossiers, sans limite fonctionnelle de profondeur.
+- Une bibliothèque désigne son contenu récursif.
+- Convention pour un site seul : ses bibliothèques documentaires accessibles et non masquées, sans parcours automatique des autres sites/sous-sites.
+- Accepter les liens de barre d’adresse et « Copier le lien » lorsque les API disponibles permettent leur résolution.
+- Conserver l’indexeur existant, ses filtres et ses métadonnées de droits.
 
-Conserver la récupération authentifiée dans les clients des sources.
-Ne pas transmettre les tokens au parser ou au modèle.
+AJUSTEMENTS OBLIGATOIRES
 
-Le parser identifie les images et leur contexte local ; le connecteur
-récupère leur contenu avec les mécanismes d’authentification existants.
+1. Une seule implémentation de chaque responsabilité.
+SharePointClient reste le client HTTP/API.
+Le resolver centralise la résolution et pilote l’énumération.
+Les deux interfaces rejoignent cette même chaîne.
+Remplacer les anciennes branches SharePoint concurrentes ; supprimer leur code devenu inutile après vérification des appelants. Aucun fallback vers l’ancien comportement cassé. Un éventuel wrapper de compatibilité doit seulement déléguer.
 
-Distinguer explicitement :
-- images référencées dans les contenus HTML ;
-- pièces jointes ou ressources Confluence et OneNote ;
-- images intégrées aux fichiers PDF/DOCX déjà pris en charge ;
-- fichiers image autonomes accessibles à l’ingestion existante.
+2. Examiner notamment validate_source_url et collect_source.
+La validation ne doit pas supprimer les paramètres nécessaires avant résolution. Ne pas résoudre ou parcourir deux fois la même source entre validation et collecte.
 
-Ne pas déclarer un cas couvert sans vérifier son parcours réel.
-Réutiliser les bibliothèques présentes et éviter toute nouvelle dépendance
-si l’existant suffit.
+3. Ne pas limiter l’identification du Web à /sites/<nom>.
+Déterminer le Web propriétaire avec les mécanismes disponibles, y compris pour les sous-sites. Aucun retour implicite au site de test.
+Utiliser un contexte explicite ou un client lié au site du traitement ; ne pas modifier le site d’un client partagé entre traitements.
 
-3. Analyse à l’ingestion
+4. Respecter le contrat réel de l’indexeur.
+« Liste d’URL canoniques » ne suffit pas à définir ce contrat.
+Vérifier les types et les champs transmis, notamment URL absolue contre chemin serveur relatif, identité du document, provenance et droits.
 
-Réutiliser Gemma pour produire :
-- transcription du texte lisible ;
-- description factuelle du contenu visuel pertinent ;
-- relations d’un schéma, valeurs et légendes visibles ;
-- indication des éléments illisibles ou incertains.
+5. Établir la cause exacte du TypeError pendant l’application.
+L’explication « peut survenir si le contrat est rompu » reste une hypothèse. Identifier l’appel fautif et les types reçus.
+Corriger les imports concernés selon le lancement réel, sans remplacement global injustifié ni bricolage de sys.path.
 
-Conserver ce texte, puis réutiliser le chunking, Granite et BM25 existants.
-Ne pas se limiter à une courte légende générique.
-Ne pas inventer de valeurs ou de relations.
+6. Traiter toutes les pages de résultats et tous les sous-dossiers.
+Prévenir les doublons, rester dans le périmètre demandé et signaler tout parcours incomplet.
+Vérifier les capacités disponibles pour GUID, liens de partage et caractères particuliers. Un format non résoluble doit produire un motif explicite.
 
-Respecter la limite d’entrée des embeddings sans troncature silencieuse.
+VALIDATION
 
-4. Provenance et restitution
+Tester les deux entrées jusqu’à un indexeur simulé :
+- Fichier seul ; dossier profond ; pagination.
+- Deux sites distincts et deux dossiers voisins dans un même site.
+- Paramètres de navigation conservés et encodages.
+- Erreurs HTTP et parcours partiel.
+- Absence de régression Confluence/OneNote.
 
-Conserver jusqu’au résultat des outils MCP :
-- l’origine « analyse d’image » ;
-- la référence de l’image et du document source ;
-- son emplacement lorsqu’il est disponible ;
-- les droits effectifs applicables.
+Vérifier les documents effectivement transmis, pas seulement l’absence d’exception.
+Vérifier aussi que les deux interfaces utilisent la même résolution et qu’aucune ancienne branche concurrente ne subsiste.
 
-Vérifier que le texte extrait est effectivement accessible à la génération
-et au vérificateur documentaire existant.
+GESTION DU CONTEXTE
 
-Distinguer le texte transcrit de la description générée par Gemma.
-La vérification d’une réponse contre cette description ne doit pas être
-présentée comme une vérification indépendante de l’image originale.
-
-Réutiliser les mécanismes existants de stockage et de citation.
-Aucun nouvel outil MCP par défaut.
-
-5. Réingestion et erreurs
-
-Réutiliser les mécanismes existants pour :
-- éviter les doublons ;
-- remplacer les contenus dérivés devenus périmés ;
-- éviter de réanalyser inutilement une image inchangée.
-
-Prévoir le retraitement des documents déjà indexés contenant des images,
-même si leur version source n’a pas changé. Fournir la commande ou
-l’opération réelle nécessaire, fondée sur le code existant.
-
-Une erreur sur une image doit être identifiable et ne doit pas empêcher
-l’ingestion du texte exploitable du document.
-Ne pas enregistrer une analyse échouée comme réussie.
-
-6. Validation et restitution
-
-Vérifier avec des exemples synthétiques :
-- recherche d’une information présente uniquement dans une image ;
-- réponse sur une relation visible dans un schéma ;
-- conservation des références et des droits ;
-- réingestion sans doublons ;
-- poursuite de l’ingestion lorsqu’une image échoue.
-
-À la fin, fournir uniquement :
-- fichiers modifiés et rôle des changements ;
-- vérifications exécutées et résultats ;
-- couverture réelle par source et format ;
-- opération nécessaire pour retraiter les anciens documents ;
-- éventuel blocage précis.
-
-Aucune refonte générale, aucun nouveau modèle ou service,
-aucun fichier de rapport supplémentaire.
+Effectuer des lectures ciblées et éviter de recopier fichiers ou longs logs dans la conversation.
+Terminer par un bilan bref : fichiers modifiés, anciennes branches retirées, tests exécutés, limites et éventuels travaux restants. Ce bilan doit permettre une reprise dans une nouvelle conversation.
+Distinguer les tests simulés des vérifications réellement effectuées contre SharePoint.
