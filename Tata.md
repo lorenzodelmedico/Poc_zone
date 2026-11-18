@@ -1,40 +1,53 @@
-MODE: AGENT / APPLY — FINAL INTEGRATION VALIDATION
+MODE: AGENT / APPLY — FIX VALIDATION BLOCKER
 
-The architectural refactoring is complete. Do not introduce another architecture or perform unnecessary refactoring.
+The integration report incorrectly declares SUCCESS despite only 2 out of 6 scenarios passing.
 
-Before declaring success, validate the actual application behavior.
+Do not modify the architecture or add new functionality.
 
-Critical issue to investigate:
-"execute()" still appears to bypass semantic routing unless "kind == "chat" and mode == "full"", defaulting to the documentary workflow otherwise.
+1. Fix the Unicode encoding failure
 
-Determine whether this causes previous tests to exercise the wrong execution path. Preserve legitimate evaluation and document-selection functionality, but ensure the semantic router is actually used for conversational requests.
+Investigate the exact origin of the "UnicodeEncodeError: 'charmap' codec can't encode character '\\u202f'".
 
-Also verify:
+Identify whether the exception comes from LLM debug printing, subprocess output, logging, or another component.
 
-1. Documentary requests without evidence must not silently fall back to general model knowledge.
-2. Profile answers must be grounded in the actual MCP results. The documentary verifier may be inapplicable, but structured-data correctness must still be checked.
-3. "user_profile" must retrieve only the necessary backend fields, not retrieve everything and filter afterward.
-4. "resolve_and_execute_tools()" must use real tool schemas, authorized tool names and validated arguments returned by the model.
-5. Mixed requests must correctly combine authorized user data with documentary evidence.
-6. MLflow traces must preserve useful routing, tool and latency metrics without logging raw personal data.
+Apply a minimal, robust UTF-8 fix at the relevant I/O boundary, compatible with the existing Windows environment.
 
-Execute real integration tests through "ask()", covering identity, professional history, training, documents, mixed requests, general requests and unavailable sources.
+Preserve Unicode content in model responses. Do not modify or strip model-generated text to hide encoding problems.
 
-Use synthetic data or approved sanitized fixtures.
+2. Correct validation reporting
 
-For every test, record:
+- A test interrupted by an exception is ERROR, never PASS.
+- Print the failure stage, exception class and sanitized traceback.
+- Report actual tool calls, route, response status and execution time.
+- Distinguish PASS, FAIL and ERROR.
+- Never report overall SUCCESS unless every required scenario passes.
+- Do not treat successful syntax checks as functional validation.
 
-- Expected versus actual route.
-- Expected versus executed MCP tools.
-- Tool arguments and success/failure status.
-- Whether the answer correctly uses the retrieved data.
-- LLM/MCP calls, latency and token consumption when available.
-- Explicit PASS/FAIL with failure reason.
+3. Rerun the six existing end-to-end scenarios
 
-A wrong route followed by a generic answer must be marked FAIL.
+Validate:
 
-Fix confirmed defects only, then rerun the relevant tests.
+- Identity
+- Professional history
+- Training
+- Document retrieval
+- Mixed user-data/document retrieval
+- General conversation
 
-Do not create additional frameworks, duplicate test suites or rewrite working RAG components.
+For each scenario, verify the actual route, selected and executed tools, validated arguments, retrieved data, final answer and verification status.
 
-Provide a concise final report with actual test results and remaining issues. Do not claim successful validation based only on syntax checks or static code inspection.
+The test must FAIL if the answer falls back to general knowledge instead of answering a request that requires retrieved data.
+
+4. Preserve the current implementation
+
+Do not introduce new frameworks, files, redundant fallback mechanisms or special-case routing.
+
+Reuse existing tests and logging infrastructure.
+
+Fix only confirmed defects, rerun the affected scenarios, then execute the complete suite.
+
+Expected report
+
+Provide the final PASS/FAIL/ERROR results, the root cause of any remaining failures, actual latency and LLM/MCP calls.
+
+Do not declare completion while tests remain failed or unexecuted.
