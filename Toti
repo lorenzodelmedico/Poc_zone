@@ -1,17 +1,9 @@
-Mode Agent (Continue). Plan court puis APPLY dans le même échange.
+Mode Agent (Continue). PLAN court puis APPLY. Périmètre limité au vérificateur documentaire.
 
-1. Priorité du skill documentaire
-Conserver le chat, le sélecteur de skills et les parcours existants. Au moment de l’envoi, vérifier si le skill « Rechercher dans les documents » est explicitement sélectionné pour cette demande.
+1. Rejouer le cas en échec par le point d’entrée utilisé par le chat. Confirmer que ce chemin utilise le correctif précédent. Retrouver l’opération exacte qui lève le TypeError, avec fonction, ligne et types reçus. Distinguer les extraits envoyés au modèle des preuves renvoyées pour chaque affirmation. Si la trace manque, compléter les traces MLflow existantes avec l’étape, la classe d’erreur et la structure des données, sans journaliser leur contenu.
 
-- Skill sélectionné : appeler directement le parcours documentaire existant, sans passer par le routeur. Si les preuves manquent, afficher une abstention. Une erreur technique ou un échec de vérification doit être signalé. Aucun repli vers generate_general, même avec un préfixe.
-- Skill non sélectionné : transmettre la demande au routeur habituel, avec toutes ses routes actuelles.
+2. Corriger la cause à l’endroit où elle se produit. Corriger aussi la perte de proof_missing si l’affectation est toujours présente. Récupérer les erreurs de check_proofs dans une variable séparée et les ajouter à la liste locale. Vérifier que le contrôle de type existant écarte une preuve mal formée avant tout accès à ses champs.
 
-Vérifier que le signal utilisé représente bien la sélection du skill pour cette demande. Si le correctif précédent a retiré le routeur ou un parcours du chat, le rétablir par un changement ciblé.
+3. Garder une distinction explicite entre preuve invalide, qui peut rendre une affirmation indéterminée, et exception technique, qui doit rester une erreur. Préserver le comptage des affirmations et la vérification avant affichage.
 
-2. Recherche et classement
-Réunir les résultats BM25 et Granite sur le même périmètre autorisé, jusqu’à 20 par branche. Dédupliquer puis transmettre toute l’union à Jina. Jina seul détermine l’ordre final. Si l’appel échoue, afficher l’erreur et arrêter avant la génération. Aucun classement de secours.
-
-3. Découpage et contexte
-Garder 350 tokens comme cible souple, avec des coupes par section, paragraphe ou phrase. Compter l’entrée complète de Granite, titres inclus, si un compteur compatible existe. À défaut, garder la borne prudente en caractères. Après Jina, ajouter au plus un voisin de chaque côté si les droits, la version du document et le budget le permettent. Vérifier la réponse sur les extraits effectivement utilisés avant affichage.
-
-Contrôler depuis le point d’entrée du chat que la même question va directement au RAG avec le skill sélectionné et passe par le routeur sans cette sélection. Vérifier aussi l’abstention documentaire et l’arrêt sur erreur Jina.
+Rejouer le cas qui échouait et un cas valide via le même chemin. Retour bref avec la ligne fautive, le correctif et les résultats réellement obtenus. Si le TypeError n’a pas été reproduit ou localisé, le signaler explicitement.
