@@ -1,32 +1,23 @@
-Mode : Agent — APPLY
+Mode Agent (Continue). Faire un plan de 3 lignes, puis appliquer dans le même échange.
 
-Appliquer un correctif ciblé au routage documentaire, en réutilisant l’implémentation existante.
+Corriger le RAG documentaire réellement appelé depuis l’interface. Partir du point d’entrée du chat et suivre uniquement l’indexation, la recherche et l’assemblage du contexte utilisés par ce parcours. Réutiliser les fonctions, clients et fichiers existants. Corriger leur ordre ou leurs conditions quand une brique est déjà présente.
 
-Constat issu de l’analyse précédente dans app/agent.py :
-- route_question peut sélectionner « general » alors que scope['enabled'] vaut True.
-- La branche « general » appelle generate_general avec reason='document_skill_disabled', potentiellement trompeur.
-- Lorsque raw.strip() == NO_DOCUMENTARY_ANSWER, un autre chemin appelle generate_general avec reason='generation_abstention'.
+1. Routage documentaire
+Vérifier `kind="chat"`, `mode="full"`, `scope["enabled"]` et `route_question`. Distinguer la disponibilité de l’outil de l’activation explicite du bouton. Avec le bouton activé, « Politique télétravail » doit déclencher la recherche même si le routeur propose `general`. Conserver le parcours local de « Qui suis-je ? » à zéro appel LLM.
 
-Objectif : respecter une demande documentaire explicite et rendre les échecs compréhensibles, tout en conservant le routage des autres demandes.
+Vérifier les deux replis observés vers `generate_general`, lors du routage et après `NO_DOCUMENTARY_ANSWER`. En mode documentaire, terminer avec une réponse vérifiée ou un motif précis parmi aucun passage, preuves insuffisantes, erreur technique ou échec de vérification. Corriger `document_skill_disabled` s’il est utilisé alors que la recherche est active.
 
-1. Vérifier le chemin réellement exécuté depuis l’UI jusqu’au traitement : transmission du bouton, construction de scope, valeurs de kind et mode, décision de routage et recherche effective. Les numéros de ligne précédemment cités sont indicatifs.
+2. Indexation
+Vérifier l’unité réellement utilisée. Les captures mentionnent `chunk_chars`, alors que la cible convenue est d’environ 350 tokens de contenu. Découper par section quand la structure est fiable, puis par paragraphes et phrases. Autoriser un bloc plus long si cela évite une coupure logique et que l’entrée complète envoyée à Granite tient sous la limite effective, au maximum 512 tokens avec titre, section et tokens spéciaux. Utiliser le compteur compatible disponible. À défaut, garder la borne prudente existante et signaler la limite.
 
-2. Déterminer dans le code si scope['enabled'] signifie « recherche disponible » ou « recherche explicitement demandée pour cet échange ».
-- Une demande documentaire explicite doit imposer le parcours documentaire avant toute décision LLM susceptible de l’écarter.
-- La simple disponibilité de l’outil doit conserver le routage automatique.
-- Si ces notions sont confondues, les distinguer avec la modification minimale nécessaire.
-- Une question courte comme « Politique télétravail » ne justifie pas, à elle seule, d’éviter la recherche.
+Indexer le titre, le chemin de section et le passage. Conserver le texte original, l’identifiant du document, sa version, la position du passage et les droits. Réutiliser la réindexation existante pour remplacer les anciens passages des documents concernés.
 
-3. Conserver les parcours existants pour les autres demandes. Préserver notamment le traitement local de « Qui suis-je ? » à partir du contexte utilisateur chargé, sans appel LLM ni recherche documentaire. Utiliser « mixed » uniquement lorsqu’un besoin réel combine profil et documents.
+3. Recherche et reclassement
+Exécuter BM25 et Granite indépendamment sur le même périmètre autorisé. BM25 doit pouvoir remonter un passage que Granite n’a pas sélectionné. Prendre 20 candidats par branche comme réglage initial, dédupliquer par identité de passage et transmettre toute l’union à Jina Reranker v2 Base Multilingual. Son score donne l’ordre final. En cas d’échec Jina, garder l’ordre de fusion existant ou RRF et tracer le mode dégradé.
 
-4. Dans le parcours documentaire, supprimer les basculements automatiques vers generate_general. Conserver l’abstention et distinguer :
-- recherche terminée sans résultat exploitable ;
-- passages récupérés mais insuffisants pour répondre ;
-- erreur technique, avec l’étape concernée ;
-- vérification échouée ou incomplète.
+4. Contexte et vérification
+Vérifier si l’assemblage du contexte charge déjà les voisins, puis réutiliser ou compléter cette logique. Après reclassement, réserver le budget de génération aux meilleurs passages, puis ajouter au plus un voisin de chaque côté quand le budget le permet. Exiger le même document, la même version et des droits valides. Fusionner les chevauchements et transmettre les extraits originaux au vérificateur avant affichage.
 
-NO_DOCUMENTARY_ANSWER ne suffit pas à conclure qu’aucun document n’a été trouvé. Respecter le blocage existant des réponses documentaires non validées.
+Valider rapidement via le point d’entrée réellement utilisé par l’UI, avec les tests existants ou un cas synthétique court. Vérifier le bouton activé, la présence d’un candidat lexical dans l’union, l’ajout d’un voisin et la sortie en cas d’abstention. Reporter le benchmark. Dans les traces existantes, relever la route exécutée, les comptes par étape et le motif final, avec des métadonnées techniques uniquement.
 
-5. Réutiliser le workflow documentaire, ses contrôles d’accès et son vérificateur. Éviter toute duplication de recherche ou d’orchestration. Si une reformulation est utilisée et échoue ou renvoie une requête vide, utiliser la question originale. Aucun appel LLM uniquement pour produire une décision ensuite ignorée.
-
-6. Corriger les motifs de diagnostic et compléter les traces existantes : état
+Retour court attendu. Indiquer ce qui était déjà actif, ce qui a été corrigé, ce qui a été vérifié et l’action de réindexation ciblée à lancer si nécessaire.
