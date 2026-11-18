@@ -1,23 +1,14 @@
-Mode Agent (Continue). Faire un plan de 3 lignes, puis appliquer dans le même échange.
+Mode Agent (Continue). Plan de deux lignes puis APPLY dans le même échange. Corriger le pipeline existant en place.
 
-Corriger le RAG documentaire réellement appelé depuis l’interface. Partir du point d’entrée du chat et suivre uniquement l’indexation, la recherche et l’assemblage du contexte utilisés par ce parcours. Réutiliser les fonctions, clients et fichiers existants. Corriger leur ordre ou leurs conditions quand une brique est déjà présente.
+1. Un seul mode dans le chat
+Le chat est exclusivement documentaire. L’action « Rechercher dans les documents » lance directement le RAG. Retirer le sélecteur de modes, la décision de routage et tous les appels à generate_general depuis cette entrée, y compris le repli derrière NO_DOCUMENTS_PREFIX. Une recherche sans résultat ou sans preuve suffisante se termine par une abstention explicite.
 
-1. Routage documentaire
-Vérifier `kind="chat"`, `mode="full"`, `scope["enabled"]` et `route_question`. Distinguer la disponibilité de l’outil de l’activation explicite du bouton. Avec le bouton activé, « Politique télétravail » doit déclencher la recherche même si le routeur propose `general`. Conserver le parcours local de « Qui suis-je ? » à zéro appel LLM.
+2. Recherche et classement
+Conserver BM25 et Granite sur le même périmètre autorisé. Réunir et dédupliquer jusqu’à 20 candidats par branche, puis transmettre toute l’union à Jina Reranker v2 Base Multilingual. Jina détermine seul l’ordre final. Retirer RRF et tout classement de secours de ce parcours. Si l’appel Jina échoue, arrêter la requête avant génération et indiquer que le reclassement a échoué.
 
-Vérifier les deux replis observés vers `generate_general`, lors du routage et après `NO_DOCUMENTARY_ANSWER`. En mode documentaire, terminer avec une réponse vérifiée ou un motif précis parmi aucun passage, preuves insuffisantes, erreur technique ou échec de vérification. Corriger `document_skill_disabled` s’il est utilisé alors que la recherche est active.
+3. Découpage et contexte
+Dans le découpeur existant, privilégier les sections, puis les paragraphes et les phrases. Garder 350 tokens de contenu comme cible souple. Si un compteur compatible est disponible, contrôler toute l’entrée envoyée à Granite, titre et section inclus, contre la limite effective de 512 tokens au maximum. À défaut, garder la borne prudente précédente en caractères et la déclarer comme approximation.
 
-2. Indexation
-Vérifier l’unité réellement utilisée. Les captures mentionnent `chunk_chars`, alors que la cible convenue est d’environ 350 tokens de contenu. Découper par section quand la structure est fiable, puis par paragraphes et phrases. Autoriser un bloc plus long si cela évite une coupure logique et que l’entrée complète envoyée à Granite tient sous la limite effective, au maximum 512 tokens avec titre, section et tokens spéciaux. Utiliser le compteur compatible disponible. À défaut, garder la borne prudente existante et signaler la limite.
+Après Jina, utiliser l’assemblage existant pour ajouter au plus un voisin de chaque côté si le budget le permet. Chaque voisin doit être autorisé et appartenir à la même version du même document. Soumettre les extraits effectivement utilisés au vérificateur avant affichage.
 
-Indexer le titre, le chemin de section et le passage. Conserver le texte original, l’identifiant du document, sa version, la position du passage et les droits. Réutiliser la réindexation existante pour remplacer les anciens passages des documents concernés.
-
-3. Recherche et reclassement
-Exécuter BM25 et Granite indépendamment sur le même périmètre autorisé. BM25 doit pouvoir remonter un passage que Granite n’a pas sélectionné. Prendre 20 candidats par branche comme réglage initial, dédupliquer par identité de passage et transmettre toute l’union à Jina Reranker v2 Base Multilingual. Son score donne l’ordre final. En cas d’échec Jina, garder l’ordre de fusion existant ou RRF et tracer le mode dégradé.
-
-4. Contexte et vérification
-Vérifier si l’assemblage du contexte charge déjà les voisins, puis réutiliser ou compléter cette logique. Après reclassement, réserver le budget de génération aux meilleurs passages, puis ajouter au plus un voisin de chaque côté quand le budget le permet. Exiger le même document, la même version et des droits valides. Fusionner les chevauchements et transmettre les extraits originaux au vérificateur avant affichage.
-
-Valider rapidement via le point d’entrée réellement utilisé par l’UI, avec les tests existants ou un cas synthétique court. Vérifier le bouton activé, la présence d’un candidat lexical dans l’union, l’ajout d’un voisin et la sortie en cas d’abstention. Reporter le benchmark. Dans les traces existantes, relever la route exécutée, les comptes par étape et le motif final, avec des métadonnées techniques uniquement.
-
-Retour court attendu. Indiquer ce qui était déjà actif, ce qui a été corrigé, ce qui a été vérifié et l’action de réindexation ciblée à lancer si nécessaire.
+Faire des contrôles courts via le point d’entrée du chat. Vérifier que l’union arrive à Jina, qu’une absence de preuve produit une abstention et qu’un échec Jina arrête la requête. Résumer les changements et les contrôles réellement exécutés.
