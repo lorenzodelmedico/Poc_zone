@@ -248,3 +248,95 @@ def verify_answer(settings, store, api, user_id, run_id, draft_result=None, step
         if not is_draft:
             store.save_verification(user_id, run_id, result)
     return result
+
+
+
+
+
+
+
+
+
+od. Here is the actual current code from all files (excluding verification.py) that is involved in the verification workflow.
+
+1. The Entry Point: app/mcp_server.py
+This is the tool definition that the LLM or UI calls to trigger a verification of a recorded run.
+
+
+Apply
+@mcp.tool()
+def verify_answer(run_id: str) -> str:
+    return check_answer(s,store,api,user_id,run_id)
+2. The Orchestrator: app/agent.py
+This file contains the two main ways verification is triggered:
+
+Automatic verification during the generation of a new answer (validate_document_draft).
+Manual verification of a previously saved answer (verify_recorded).
+A. The Automatic Flow (validate_document_draft)
+This is called inside execute right after the LLM generates a draft answer.
+
+
+Apply
+def validate_document_draft(settings, store, api, user_id, rid, raw, evidence,
+                            context_used, steps, result, progress):
+    draft = safe_answer(raw)
+    result['draft_answer'] = draft
+    result['draft_checks'] = citation_checks(draft, evidence)
+    progress('Vérification des informations')
+    with timed_step(steps, 'Vérification', 'verification') as step:
+        verification = verify_answer(settings, store, api, user_id, rid,
+            draft_result={'answer': draft, 'evidence': evidence, 'answer_scope': result['answer_scope']},
+            steps=steps, user_context=context_used)
+        step['details'] = {'status': verification['status'], 'scope': result['answer_scope'],
+                           'counts': verification.get('counts', {}),
+                           'issues': [{'id': c['id'], 'verdict': c['verdict'], 'reason': c['reason'],
+                                       'warning': c.get('warning', '')}
+                                      for c in verification.get('claims', []) if c['verdict'] != 'supported']}
+        if verification['status'] == 'error':
+            step['error'] = verification.get('error') or 'VerificationError'
+    selected = select_supported(verification)
+    result['answer_status'] = selected['answer_status']
+    if selected['answer_status'] != 'full':
+        result['rejected_answer'] = draft
+    return selected['answer'], verification, selected['needs_review']
+B. The Manual Flow (verify_recorded)
+This is called when a user clicks "Verify" on an existing answer in the UI.
+
+
+Apply
+async def verify_recorded(settings,store,user_id,run_id):
+    store.answer_run(user_id,run_id)
+    try:
+        async with mcp_session(settings,user_id) as session:
+            return unpack(await session.call_tool('verify_answer',{'run_id':run_id}))
+    finally:
+        export_run(store,user_id,run_id)
+C. The Tool Caller (call_tool & unpack)
+These are the utility functions used by verify_recorded to communicate with the MCP server.
+
+
+Apply
+async def call_tool(session, name, arguments, steps, *, profile=False):
+    start = time.perf_counter()
+    item = {'name':'MCP '+name,'started_at_ns':time.time_ns(),'inputs':arguments}
+    steps.append(item)
+    try:
+        result = unpack(await session.call_tool(name,arguments))
+        item['outputs'] = {'profile_hash':digest(result)} if profile else result
+        return result
+    except Exception as exc:
+        item['error'] = safe_error(exc)
+        raise
+    finally:
+        item["kind"] = "mcp"
+        item["server"] = "documentaire"
+        item['duration_s'] = time.perf_counter()-start
+
+def unpack(result):
+    texts = [content.text for content in result.content if content.type == 'text']
+    if result.isError:
+        detail = ' | '.join(t.strip() for t in texts if t.strip())
+        raise RuntimeError('Échec de l’outil MCP' + (': ' + detail[:1200] if detail else '.'))
+    for text in texts:
+        return json.loads(text)
+    raise ValueError('Réponse MCP non textuelle.')
