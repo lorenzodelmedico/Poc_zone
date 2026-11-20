@@ -1,9 +1,9 @@
-APPLY 1A — Implémenter et tester uniquement GET /api/me.
+APPLY 1B — Afficher le profil et l’historique réels dans Angular.
 
-Le front Angular est importé dans frontend/ et le package Python est à la racine dans app/. Lire l’initialisation du profil dans app/ui.py et le type SessionProfile dans frontend/src/app/api/chat.models.ts. Vérifier dans le code la résolution de POC_USER_ID et les signatures du cache et d’Access.
+Vérifier d’abord GET /api/me sur le serveur local avec la configuration du projet. Si le profil réel ne remonte pas, corriger ce point avant de poursuivre.
 
-Ajouter la route dans app/http_api.py avec FastAPI. Réutiliser load_env(), Settings et la lecture du profil existante via Access.user_context et son cache. Résoudre l’identité depuis la configuration serveur. Retourner {profile_enabled, profile} avec les champs d’affichage déclarés dans le type Angular. Si l’identifiant POC est absent, retourner une erreur explicite au format {code, message}.
+Dans app/http_api.py, ajouter GET /api/conversations et POST /api/conversations via Store, puis GET /api/conversations/{cid}/messages via Access.visible_messages. Respecter les types Angular et vérifier l’accès à la conversation. Le POST est utilisé au démarrage si la liste est vide.
 
-Vérifier que FastAPI et son client de test sont disponibles dans la .venv du projet. Exécuter un test en mémoire avec TestClient et un profil fictif. Vérifier le statut 200 et le JSON attendu, puis le cas où l’identifiant est absent. Si une dépendance manque, utiliser le registre interne configuré ou indiquer le paquet et le test bloqué.
+Ajouter le proxy frontend/proxy.conf.json pour transmettre /api/** à http://127.0.0.1:8000. Après arrêt de la démo, vérifier le profil réel et l’ouverture d’une ancienne discussion avec npm.cmd run start:api -- --proxy-config proxy.conf.json.
 
-Limiter ce lot à la route de profil et à sa vérification. Le serveur HTTP, le proxy, les autres routes et le déplacement vers backend/app/ sont reportés. Terminer avec les fichiers modifiés, la commande réellement exécutée et le résultat du test.
+Limiter ce lot au profil et à l’historique. Rapporter les résultats observés pour /api/me, /api/conversations et l’affichage dans Angular.
