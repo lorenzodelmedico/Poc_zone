@@ -1,9 +1,15 @@
-APPLY 1B — Afficher le profil et l’historique réels dans Angular.
+APPLY 1C — Brancher uniquement l’envoi d’une question depuis Angular.
 
-Vérifier d’abord GET /api/me sur le serveur local avec la configuration du projet. Si le profil réel ne remonte pas, corriger ce point avant de poursuivre.
+Dans app/http_api.py, ajouter POST /api/conversations/{cid}/turns. Lire le contrat du flux dans frontend/README.md. Réutiliser la résolution d’identité du lot 1B, contrôler l’accès à la conversation et valider la question, avec une limite de 8 000 caractères.
 
-Dans app/http_api.py, ajouter GET /api/conversations et POST /api/conversations via Store, puis GET /api/conversations/{cid}/messages via Access.visible_messages. Respecter les types Angular et vérifier l’accès à la conversation. Le POST est utilisé au démarrage si la liste est vide.
+Appeler app.agent.ask une seule fois avec les services existants et on_progress. Émettre les étapes pendant l’exécution au format application/x-ndjson, un objet JSON par ligne.
 
-Ajouter le proxy frontend/proxy.conf.json pour transmettre /api/** à http://127.0.0.1:8000. Après arrêt de la démo, vérifier le profil réel et l’ouverture d’une ancienne discussion avec npm.cmd run start:api -- --proxy-config proxy.conf.json.
+- Pendant le traitement, émettre {"type":"progress","label":"..."} dès que le callback fournit une étape.
+- Après enregistrement du résultat visible, émettre {"type":"completed"}. Un refus de vérification enregistré est aussi un résultat visible.
+- Avant ouverture du flux, retourner les erreurs HTTP au format {code, message}. Après ouverture, terminer un échec par {"type":"error","code":"...","message":"..."}.
 
-Limiter ce lot au profil et à l’historique. Rapporter les résultats observés pour /api/me, /api/conversations et l’affichage dans Angular.
+Réutiliser la persistance de ask. Angular relit les messages via la route du lot 1B pour afficher le résultat final.
+
+Tester en mode Angular connecté sur une discussion de test. Vérifier qu’une étape émise apparaît avant la fin du traitement, puis que la question et sa réponse apparaissent une seule fois et sont retrouvées après actualisation. Rapporter les résultats réellement observés.
+
+Périmètre de ce lot limité à l’envoi et à la recette du tour. Les skills, l’indexation, les avis et le déplacement du package Python seront traités dans leurs propres lots.
