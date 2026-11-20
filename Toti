@@ -1,11 +1,21 @@
-APPLY
+Mode PLAN. Préparer l’intégration du front Angular 20.2.4 autonome au backend Python existant. Le package Python est actuellement sous app/ et le front est importé dans frontend/. Streamlit appelle les fonctions Python directement. L’API HTTP du chat est à créer.
 
-Appliquer le plan dans les fonctions existantes, avec ces précisions.
+Lire app/ui.py, les modules réellement appelés par le chat, frontend/README.md et frontend/src/app/api/{chat-api.ts,chat.models.ts}. Les fichiers Angular donnent les URL, les méthodes HTTP et les formes de réponse effectivement consommées. Vérifier les signatures Python et les chemins réels avant de proposer le patch.
 
-1. Regrouper règle, conditions et exceptions dans extract_claims avant l’appel LLM. En cas de découpage ambigu, vérifier le bloc complet. select_supported publie chaque bloc validé dans son intégralité et conserve ses numéros de citation.
+Préparer deux lots.
 
-2. Vérifier le délai effectif de l’appel de vérification dans le client HTTP, tentatives comprises. Tester une réponse HTTP lente et vérifier que le chat affiche le motif llm_timeout.
+1. Raccordement. Ajouter une façade HTTP autour du package app/ à son emplacement actuel, avec app/http_api.py comme point d’entrée proposé. Réutiliser le chargement de configuration, les clients et le stockage existants. FastAPI et Uvicorn sont proposés si disponibles dans les registres internes. Préparer le proxy de développement Angular vers 127.0.0.1:8000, en conservant le préfixe /api. Utiliser le mode start:api pour la recette du raccordement et npm start pour la démo.
 
-3. Ajouter les cas aux fichiers de tests existants. Tester le chemin réellement utilisé par le chat via ask/execute. Avec 12 affirmations validées sur 13, le chat doit afficher une réponse partial contenant les 12 affirmations et leurs seules sources.
+2. Organisation du dépôt. Après recette du raccordement, déplacer le package vers backend/app/. Recenser les chemins de .env, du stockage, de l’index, de MLflow et des scripts qui dépendent du répertoire de lancement. Préférer un lancement depuis la racine avec --app-dir backend si cela préserve leur résolution. Fournir les commandes PowerShell avec le Python de la .venv utilisée par le dépôt.
 
-Indiquer les fichiers modifiés et les résultats des tests.
+Adapter les routes du contrat aux fonctions existantes.
+
+- Profil et historique. Résoudre le uid côté Python depuis POC_USER_ID pour le POC local. Réutiliser get_context et Access.user_context pour /api/me. Relire les conversations et messages existants via Store et Access. Projeter les champs d’affichage, les citations autorisées et can_feedback dans les types Angular. Vérifier les droits de chaque ressource, y compris pour les écritures.
+- Envoi. Appeler ask une seule fois par tour. Relayer on_progress pendant l’exécution dans un flux application/x-ndjson UTF-8, un objet JSON par ligne. Émettre completed une fois le résultat visible enregistré. Un refus de vérification enregistré est visible dans l’historique avec son statut. Pour une erreur après ouverture du flux, émettre un événement error. Pour une erreur HTTP avant ouverture, respecter le JSON plat {code, message} consommé par le client. Tester que le premier événement arrive avant la fin du tour via le proxy.
+- Skills et « Ajouter et indexer ». Réutiliser get_skill_state, set_document_search, set_verification et select_source. Pour l’ajout par URL, appeler enqueue_source_sync avec Synchronizer.index_from_chat, le périmètre autorisé et le rappel de traçabilité existant. Retourner l’état des skills avec source_id et job_id. Le suivi réutilise get_source_job et expose attente, progression, succès et échec selon le contrat. Respecter la politique de vérification en vigueur.
+- « Évaluer la réponse ». Résoudre le run_id côté serveur à partir du message via Store.run_for_message. Charger l’avis existant ou renvoyer null. Sauvegarder via Store.save_feedback puis appeler export_run. Si le suivi MLflow échoue après sauvegarde, confirmer la sauvegarde et renseigner tracking_warning.
+- Mémoire. Brancher les routes de reprise et d’effacement du contrat sur Access.suggestions et Store.forget. Recréer une discussion après effacement.
+
+Les deux actions « Évaluer la réponse » et « Ajouter et indexer » sont obligatoires dans le chat Angular. Le périmètre Angular couvre le chat et ses actions contextuelles. Streamlit sert de référence fonctionnelle pendant la recette.
+
+En PLAN, retourner les fichiers à modifier, la correspondance des routes avec les fonctions effectivement trouvées, les chemins à vérifier avant déplacement et les commandes de recette. Au signal APPLY, réaliser le premier lot et vérifier le profil, une ancienne conversation, un tour documentaire vérifié ou refusé, l’enregistrement et la relecture d’un avis et les états d’indexation sur une source de test autorisée. Tester l’effacement sur un stockage de test. Indiquer les vérifications effectuées avant de proposer la bascule vers backend/app/.
