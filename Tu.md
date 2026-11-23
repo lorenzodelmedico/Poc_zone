@@ -1,29 +1,43 @@
-APPLY — Lot 1G — Mémoire et reprise de sujet
+APPLY — Correctifs 1F et 1G
 
-1. Clôturer la recette 1F. Depuis Angular en mode API réel, ajouter
-   un petit dossier SharePoint autorisé. Vérifier le POST 200 avec
-   le job_id, suivre ce job jusqu’à completed et retrouver le document
-   attendu dans l’index. Limiter le mini-correctif à un défaut reproduit.
-   Vérifier aussi export_job. Si le suivi MLflow est actif et que le
-   callback d’export est déjà disponible côté backend, le raccorder.
+Corriger l’identité documentaire, le résultat des jobs d’indexation,
+leur export MLflow et la reprise de sujet. Réutiliser le pipeline
+SharePoint et les contrats Angular existants.
 
-2. Vérifier ou compléter GET /api/conversations/suggestions.
-   Réutiliser Access.suggestions(uid). Retourner jusqu’à trois objets
-   Suggestion conformes à chat.models.ts avec conversation_id,
-   theme_key, title, prompt et description si disponible. Reprendre
-   le comportement Streamlit pour construire le prompt à partir de
-   last_query et last_used. Angular doit rouvrir la conversation
-   correspondante et envoyer ce prompt au clic sur « Actualiser le sujet ».
+1. Dédupliquer le document après résolution SharePoint.
+   Reproduire l’ajout d’un même fichier via la vue de sa bibliothèque
+   puis via son lien direct. Suivre doc_id du résolveur au catalogue
+   et jusqu’aux chunks et vecteurs. Appliquer la même règle d’identité
+   dans le pipeline commun aux deux chemins. Réutiliser l’identifiant
+   SharePoint stable dans son périmètre s’il est déjà disponible.
+   Sinon, normaliser le chemin résolu pour que l’espace et %20 donnent
+   la même clé. Laisser le résolveur interpréter les paramètres d’URL.
 
-3. Vérifier ou compléter DELETE /api/conversations.
-   Résoudre uid avec le mécanisme serveur existant. Appeler
-   Store.forget(uid), puis Store.new_conversation(uid). Retourner
-   la nouvelle Conversation avec conversation_id et title pour
-   qu’Angular l’ouvre après confirmation. Respecter la conservation
-   des traces d’évaluation prévue par le comportement Streamlit.
+   Garder les deux périmètres de source et leurs rattachements.
+   Un fichier inchangé doit réutiliser le doc_id sans republier ses
+   vecteurs. Un fichier modifié doit mettre à jour ce même document.
+   Pour les doublons existants, lister les références touchées et
+   tester une réconciliation ciblée sur copie avec les ACL. Soumettre
+   la simulation avant toute suppression dans la base d’usage.
 
-4. Tester l’effacement sur un stockage isolé avec des données jetables.
-   Vérifier que l’historique de l’utilisateur testé contient uniquement
-   la nouvelle conversation vide et que les données d’un second
-   utilisateur sont préservées. Rapporter les routes vérifiées ou
-   modifiées, les résultats observés et tout blocage restant.
+2. Corriger le résultat et la trace du même job.
+   Comparer le résultat du worker, l’état terminal persisté, le JSON
+   de GET /api/conversations/{cid}/source-jobs/{jobId} et Angular.
+   Compter les documents effectivement publiés. Distinguer un document
+   déjà à jour d’un échec de publication. Sur un fichier inédit,
+   attendre 1 document indexé au premier ajout, puis 0 nouveau et
+   1 déjà à jour au second, avec un seul document dans l’index.
+
+   Vérifier que export_job appelle source_job_trace avec le résultat
+   terminal. Contrôler l’expérience et la destination réellement
+   utilisées par local_mlflow(), puis retrouver la trace par job_id
+   avec son statut et ses compteurs. Journaliser une erreur d’export
+   séparément du résultat de l’indexation.
+
+3. Valider la reprise sur un thème éligible.
+   Créer depuis Angular un échange qui remplit les critères existants
+   d’Access.suggestions. Vérifier l’écriture du thème par POST /turns,
+   puis comparer uid, stockage, filtres et résultat du GET
+   /api/conversations/suggestions. Corriger à l’étape où le thème
+   disparaît. Au clic sur « Actualiser le sujet », vérifier l’ouverture
+   de la bonne conversation et l’envoi unique du prompt.
