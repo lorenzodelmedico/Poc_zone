@@ -1,11 +1,29 @@
-APPLY correctif 1B — Réparer « Nouvelle discussion ».
+APPLY — Lot 1G — Mémoire et reprise de sujet
 
-Le profil et les anciens échanges s’affichent après une conversion de type sur GET /messages. Le bouton « Nouvelle discussion » affiche « Création de la discussion impossible ».
+1. Clôturer la recette 1F. Depuis Angular en mode API réel, ajouter
+   un petit dossier SharePoint autorisé. Vérifier le POST 200 avec
+   le job_id, suivre ce job jusqu’à completed et retrouver le document
+   attendu dans l’index. Limiter le mini-correctif à un défaut reproduit.
+   Vérifier aussi export_job. Si le suivi MLflow est actif et que le
+   callback d’export est déjà disponible côté backend, le raccorder.
 
-1. Reproduire un seul POST /api/conversations avec le corps {}, comme Angular. Relever le statut HTTP et l’erreur serveur anonymisée. Si le POST échoue, vérifier dans la liste des discussions si l’écriture a déjà eu lieu avant de réessayer.
-2. Inspecter le handler dans app/http_api.py. Vérifier les champs requis à l’entrée, la signature et le retour réel de Store.new_conversation(uid), puis la validation du modèle de sortie. Angular attend {conversation_id: string, title: string}. Si une conversion est nécessaire, l’appliquer au champ concerné à la frontière HTTP. Préserver le correctif de lecture déjà appliqué.
-3. En mode start:api, vérifier qu’un clic crée une seule discussion, l’ouvre avec un historique vide et qu’elle est retrouvée après actualisation. Vérifier aussi la réouverture d’une ancienne discussion.
+2. Vérifier ou compléter GET /api/conversations/suggestions.
+   Réutiliser Access.suggestions(uid). Retourner jusqu’à trois objets
+   Suggestion conformes à chat.models.ts avec conversation_id,
+   theme_key, title, prompt et description si disponible. Reprendre
+   le comportement Streamlit pour construire le prompt à partir de
+   last_query et last_used. Angular doit rouvrir la conversation
+   correspondante et envoyer ce prompt au clic sur « Actualiser le sujet ».
 
-Pour « L’avis enregistré est indisponible », relever uniquement le statut du GET /api/conversations/{cid}/messages/{messageId}/feedback et vérifier si la route existe. L’avis sera traité dans son propre lot.
+3. Vérifier ou compléter DELETE /api/conversations.
+   Résoudre uid avec le mécanisme serveur existant. Appeler
+   Store.forget(uid), puis Store.new_conversation(uid). Retourner
+   la nouvelle Conversation avec conversation_id et title pour
+   qu’Angular l’ouvre après confirmation. Respecter la conservation
+   des traces d’évaluation prévue par le comportement Streamlit.
 
-Rapporter la cause constatée, le correctif et les résultats réellement observés. Le lot 1C sera testé après cette correction.
+4. Tester l’effacement sur un stockage isolé avec des données jetables.
+   Vérifier que l’historique de l’utilisateur testé contient uniquement
+   la nouvelle conversation vide et que les données d’un second
+   utilisateur sont préservées. Rapporter les routes vérifiées ou
+   modifiées, les résultats observés et tout blocage restant.
