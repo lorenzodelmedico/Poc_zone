@@ -1,42 +1,24 @@
-APPLY correctif 1C — Corriger « Le traitement a été interrompu avant sa confirmation » lorsqu’une réponse finale est déjà visible dans Angular.
+APPLY 1E — Raccorder « Recherche documentaire » dans Angular.
 
-Travailler sur le code actuellement exécuté. Lire le handler POST /api/conversations/{cid}/turns dans app/http_api.py, le contrat NDJSON dans frontend/README.md, puis chat-api.ts, turn-stream.ts et la méthode send() de chat-page.ts. Appliquer le correctif et exécuter la recette dans ce même passage.
+Le correctif 1C et le lot 1D « Évaluer la réponse » sont appliqués. Lire le panneau documentaire de app/ui.py, les fonctions Python qu’il appelle et les contrats SkillState, SkillChange et SourceJob dans frontend/src/app/api/chat.models.ts.
 
-1. Reproduire et localiser la cause
+Dans app/http_api.py, raccorder trois routes en réutilisant l’identité serveur et les contrôles d’accès existants.
 
-Faire un envoi non sensible en mode start:api dans une discussion de test. Relever le statut HTTP, le Content-Type, l’ordre des types d’événements et les dernières lignes du POST reçu par le navigateur. Relever ensuite si GET /messages contient une nouvelle réponse finale associée à ce tour. Le GET peut afficher une réponse persistée même si le POST a échoué.
+1. GET /api/conversations/{cid}/skills
+   Appeler get_skill_state et retourner l’état réel de cette discussion. Le contrat attend revision, document_search, verification et sources. Retourner sources: [] si la discussion n’a aucune source associée.
 
-Identifier le motif précis de invalid_turn_stream. Examiner le terminal absent, le JSON invalide, le type inconnu, un événement après le terminal et l’écart entre le texte cumulatif et le corps final. Si nécessaire, ajouter un diagnostic temporaire limité aux types d’événements, longueurs et codes d’erreur.
+2. PATCH /api/conversations/{cid}/skills
+   Accepter une seule action par requête. Mapper {document_search: boolean} vers set_document_search, {verification: boolean} vers set_verification et {source_id: string, selected: boolean} vers select_source. Vérifier que la source appartient à la discussion et retourner le SkillState actualisé après la mutation. Si la politique Python impose la vérification, exposer verification_required: true avec verification: true et refuser sa désactivation.
 
-Comparer avec un POST lu jusqu’à sa fermeture directement côté FastAPI, sur une autre discussion de test. Un log Python placé avant yield indique que le code a atteint cette ligne. La capture HTTP indique ce qui a été reçu. Rapporter uniquement les métadonnées nécessaires, sans texte de question ou de réponse.
+3. GET /api/conversations/{cid}/source-jobs/{jobId}
+   Réutiliser get_source_job pour les tâches existantes. Vérifier le rattachement de la tâche à la discussion autorisée. Retourner le SourceJob attendu par Angular, avec son statut et les informations de progression disponibles.
 
-2. Corriger à l’endroit où le flux diverge
+Respecter les types du contrat Angular, notamment les identifiants chaîne et les booléens. Appliquer les conversions nécessaires à la frontière HTTP. Réutiliser l’état existant consommé par ask() pour le même utilisateur et la même discussion.
 
-- Si le flux direct est invalide, corriger app/http_api.py. Identifier tous les endroits qui produisent completed ou error, y compris les événements placés dans la file. Désigner une seule source pour le terminal. Avec une file commune, le générateur consomme et transmet jusqu’au terminal inclus. La fin de la tâche ask() ne suffit pas à arrêter cette lecture si un événement reste en file.
-- completed est émis une fois, après persistance du résultat lisible par GET /messages. Une erreur pendant le flux produit un seul error. Un refus fonctionnel enregistré suit le contrat existant du résultat visible. Réutiliser l’appel unique à ask() et sa persistance.
-- Sérialiser chaque événement en JSON UTF-8 suivi d’un vrai LF, comme avec json.dumps(event) + "\n" en Python. Vérifier le séparateur dans le corps HTTP. Écarter le délai artificiel après yield et le yield completed supplémentaire du plan.
-- Si le flux direct est valide et que celui reçu via le proxy diffère, corriger la différence observée au niveau du proxy. Si le corps reçu par le navigateur est valide, vérifier dans chat-api.ts la séquence DownloadProgress, Response et finish(). Consommer chaque suffixe du texte cumulatif une seule fois, y compris quand le corps final reprend tous les fragments déjà reçus.
+Recette en mode start:api
+- Activer puis désactiver la recherche documentaire. Actualiser et vérifier que le dernier état est conservé.
+- Vérifier que la modification ne se répercute pas sur une autre discussion.
+- Sur une discussion avec une source autorisée déjà présente, vérifier son statut et tester sa sélection puis sa désélection.
+- Vérifier sur un tour de test que ask() applique le réglage enregistré.
 
-3. Rendre l’avertissement cohérent avec le résultat
-
-Dans send(), décider de l’affichage de l’erreur de flux après la relecture déjà prévue de GET /messages. Pour une perte de confirmation ou une erreur de lecture du flux, effacer l’avertissement seulement si la relecture confirme une nouvelle réponse finale rattachée au tour envoyé. Une réponse ancienne ou un rapprochement ambigu ne suffit pas. Conserver les erreurs HTTP et les événements error explicites. Aucun renvoi automatique du POST.
-
-4. Prouver le résultat
-
-- Tour normal via Angular et son proxy. Un seul terminal completed, une seule réponse, aucun avertissement et historique correct après actualisation.
-- Flux fragmenté. completed peut arriver sur plusieurs fragments et le corps final peut reprendre le texte déjà reçu. Le parseur traite l’événement une seule fois.
-- Confirmation perdue, sur un test contrôlé. Si la réponse du même tour est retrouvée, l’avertissement disparaît. Sans réponse confirmée, l’avertissement reste. Une erreur explicite reste visible. Aucun doublon.
-
-Livrer la cause constatée, la preuve qui la localise, les fichiers modifiés et les résultats réellement observés. Limiter les changements au lot 1C.
-
-
-
-APPLY 1D — Brancher uniquement la lecture et l’enregistrement d’un avis.
-
-Dans app/http_api.py, implémenter GET et PUT
-/api/conversations/{cid}/messages/{messageId}/feedback
-selon le contrat frontend/README.md et les types ResponseFeedback et FeedbackReceipt.
-
-Vérifier l’accès à la conversation et au message. Résoudre le run_id côté serveur avec Store.run_for_message. GET renvoie l’avis enregistré ou HTTP 200 avec JSON null si aucun avis n’existe. PUT sauvegarde helpful, reason et comment via Store.save_feedback, puis utilise export_run. Si l’export MLflow échoue après une sauvegarde réussie, renvoyer l’avis sauvegardé avec tracking_warning: true.
-
-En mode start:api, vérifier sur une réponse éligible que le formulaire s’ouvre sans avis préalable, qu’un avis s’enregistre et qu’il est prérempli après actualisation. Rapporter les résultats observés.
+Rapporter les statuts HTTP et les résultats réellement observés. Le lot suivant branchera « Ajouter et indexer » via POST /api/conversations/{cid}/sources.
