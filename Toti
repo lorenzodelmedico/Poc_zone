@@ -1,31 +1,34 @@
-APPLY — Correctif 1F — Corriger le 500 de « Ajouter et indexer »
+APPLY — Correctif 1F — Rétablir « Ajouter et indexer »
 
-Le backend renvoie 500 sur POST /api/conversations/{cid}/sources.
-GET et PATCH /skills fonctionnent. Traiter ce POST dans app/http_api.py
-et la dépendance désignée par l’exception.
+Le POST /api/conversations/{cid}/sources renvoie 500. GET et PATCH
+/skills fonctionnent. Corriger le raccordement FastAPI au pipeline
+d’indexation existant.
 
-1. Retrouver l’exception exacte côté serveur. Si le handler transforme
-   l’exception en 500 sans la journaliser, utiliser le logger serveur
-   existant. Relever le type, la fonction et la ligne en cause.
+1. Après le 500, relire GET /skills avant tout nouvel envoi. Si la
+   source a déjà été créée, relever son job_id et lire son état avec
+   GET /source-jobs/{jobId}. Cela permet de vérifier si la mise en
+   file a eu lieu malgré l’échec HTTP.
 
-2. Avant de renvoyer le POST, relire GET /skills pour vérifier si le
-   premier essai a déjà créé la source. Si un job_id existe pour cet
-   ajout, vérifier son état avec GET /source-jobs/{jobId}. Si GET /skills
-   échoue aussi, contrôler l’état de la source et du job côté serveur.
+2. Reproduire une fois et relever la première exception côté serveur.
+   Identifier l’étape qui échoue parmi l’initialisation de Vectors ou
+   Synchronizer, l’appel à enqueue_source_sync et la construction
+   de la réponse SkillState. Si le handler masque la trace, utiliser
+   le logger serveur existant. Examiner le worker si le job a été créé.
 
-3. Comparer le handler à l’appel Streamlit. Vérifier la signature de
-   enqueue_source_sync et notamment export_job, fourni par Streamlit.
-   Si l’exception se produit après la mise en file, vérifier la
-   projection de la source dans SkillState, notamment source_id,
-   job_id et status, selon chat.models.ts. Corriger la cause observée
-   en réutilisant le pipeline et les contrôles d’accès existants.
+3. Corriger la ligne confirmée par la trace. Vérifier en particulier
+   le contrat d’export_job et ses appels. Si None est accepté, son
+   traitement doit être explicite. Si un callback est requis,
+   raccorder le suivi existant côté backend comme dans le flux
+   Streamlit. Si l’échec survient à la construction de SkillState,
+   réutiliser la projection de GET /skills avec la source réelle.
+   La méthode liée conserve déjà son instance tant que la file
+   la référence. Fonder tout changement de cycle de vie sur la trace.
 
-4. Tester depuis Angular en mode API réel avec un petit dossier autorisé
-   que le pipeline sait indexer. Attendu pour le même ajout : POST 200
-   avec la nouvelle source et son job_id, suivi du job jusqu’à completed
-   et document attendu présent dans l’index. Vérifier séparément le
-   comportement prévu par le résolveur pour l’URL de vue de liste du
-   test initial.
+4. Valider depuis Angular en mode API réel avec un petit dossier
+   autorisé que Streamlit sait indexer. Pour un même ajout, constater
+   un POST 200 avec le job_id, suivre ce job jusqu’à completed et
+   retrouver le document attendu dans l’index.
 
-Rendre un compte rendu anonymisé avec l’exception, le correctif et les
-résultats HTTP et d’indexation réellement observés.
+Rapporter l’exception exacte, le fichier et la ligne corrigés, puis
+les résultats observés. Si la recette réelle est bloquée, indiquer
+l’étape et le blocage précis.
