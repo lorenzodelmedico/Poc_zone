@@ -1,12 +1,33 @@
-APPLY correctif 1C — Une réponse apparaît dans Angular avec le message
-« Le traitement a été interrompu avant sa confirmation. »
+APPLY correctif 1C — Corriger « Le traitement a été interrompu avant sa confirmation » lorsqu’une réponse finale est déjà visible dans Angular.
 
-1. Reproduire avec une question non sensible sur une discussion de test. Vérifier la fin brute du POST /api/conversations/{cid}/turns côté FastAPI, puis via le proxy Angular sur une autre discussion de test. Rapporter le dernier type d’événement reçu et l’erreur Angular, sans journaliser le texte de la réponse.
-2. Corriger au point où le flux devient invalide. Si la fin manque côté Python, vérifier que le générateur vide sa file jusqu’au terminal même si ask() est déjà terminé. Émettre un seul completed après persistance ou un seul error en cas d’échec. Si le flux reçu est valide, vérifier le passage de partialText et du corps final à TurnStream.
-3. Dans chat-page.ts, retirer l’avertissement de flux uniquement si la relecture confirme que la réponse finale du tour qui vient d’être envoyé a bien été enregistrée. Garder l’avertissement si le lien avec ce tour est incertain et préserver les erreurs explicites du serveur. Aucun renvoi automatique du POST.
+Travailler sur le code actuellement exécuté. Lire le handler POST /api/conversations/{cid}/turns dans app/http_api.py, le contrat NDJSON dans frontend/README.md, puis chat-api.ts, turn-stream.ts et la méthode send() de chat-page.ts. Appliquer le correctif et exécuter la recette dans ce même passage.
 
-Valider trois cas. Un tour normal se termine sans avertissement. Une confirmation perdue avec réponse finale retrouvée affiche la réponse seule. Une confirmation perdue sans réponse finale conserve l’avertissement. Aucun cas ne crée de doublon.
+1. Reproduire et localiser la cause
 
+Faire un envoi non sensible en mode start:api dans une discussion de test. Relever le statut HTTP, le Content-Type, l’ordre des types d’événements et les dernières lignes du POST reçu par le navigateur. Relever ensuite si GET /messages contient une nouvelle réponse finale associée à ce tour. Le GET peut afficher une réponse persistée même si le POST a échoué.
+
+Identifier le motif précis de invalid_turn_stream. Examiner le terminal absent, le JSON invalide, le type inconnu, un événement après le terminal et l’écart entre le texte cumulatif et le corps final. Si nécessaire, ajouter un diagnostic temporaire limité aux types d’événements, longueurs et codes d’erreur.
+
+Comparer avec un POST lu jusqu’à sa fermeture directement côté FastAPI, sur une autre discussion de test. Un log Python placé avant yield indique que le code a atteint cette ligne. La capture HTTP indique ce qui a été reçu. Rapporter uniquement les métadonnées nécessaires, sans texte de question ou de réponse.
+
+2. Corriger à l’endroit où le flux diverge
+
+- Si le flux direct est invalide, corriger app/http_api.py. Identifier tous les endroits qui produisent completed ou error, y compris les événements placés dans la file. Désigner une seule source pour le terminal. Avec une file commune, le générateur consomme et transmet jusqu’au terminal inclus. La fin de la tâche ask() ne suffit pas à arrêter cette lecture si un événement reste en file.
+- completed est émis une fois, après persistance du résultat lisible par GET /messages. Une erreur pendant le flux produit un seul error. Un refus fonctionnel enregistré suit le contrat existant du résultat visible. Réutiliser l’appel unique à ask() et sa persistance.
+- Sérialiser chaque événement en JSON UTF-8 suivi d’un vrai LF, comme avec json.dumps(event) + "\n" en Python. Vérifier le séparateur dans le corps HTTP. Écarter le délai artificiel après yield et le yield completed supplémentaire du plan.
+- Si le flux direct est valide et que celui reçu via le proxy diffère, corriger la différence observée au niveau du proxy. Si le corps reçu par le navigateur est valide, vérifier dans chat-api.ts la séquence DownloadProgress, Response et finish(). Consommer chaque suffixe du texte cumulatif une seule fois, y compris quand le corps final reprend tous les fragments déjà reçus.
+
+3. Rendre l’avertissement cohérent avec le résultat
+
+Dans send(), décider de l’affichage de l’erreur de flux après la relecture déjà prévue de GET /messages. Pour une perte de confirmation ou une erreur de lecture du flux, effacer l’avertissement seulement si la relecture confirme une nouvelle réponse finale rattachée au tour envoyé. Une réponse ancienne ou un rapprochement ambigu ne suffit pas. Conserver les erreurs HTTP et les événements error explicites. Aucun renvoi automatique du POST.
+
+4. Prouver le résultat
+
+- Tour normal via Angular et son proxy. Un seul terminal completed, une seule réponse, aucun avertissement et historique correct après actualisation.
+- Flux fragmenté. completed peut arriver sur plusieurs fragments et le corps final peut reprendre le texte déjà reçu. Le parseur traite l’événement une seule fois.
+- Confirmation perdue, sur un test contrôlé. Si la réponse du même tour est retrouvée, l’avertissement disparaît. Sans réponse confirmée, l’avertissement reste. Une erreur explicite reste visible. Aucun doublon.
+
+Livrer la cause constatée, la preuve qui la localise, les fichiers modifiés et les résultats réellement observés. Limiter les changements au lot 1C.
 
 
 
