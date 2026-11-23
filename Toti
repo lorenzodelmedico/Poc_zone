@@ -1,11 +1,21 @@
-APPLY correctif 1B — Réparer « Nouvelle discussion ».
+APPLY correctif 1C — Une réponse apparaît dans Angular avec le message
+« Le traitement a été interrompu avant sa confirmation. »
 
-Le profil et les anciens échanges s’affichent après une conversion de type sur GET /messages. Le bouton « Nouvelle discussion » affiche « Création de la discussion impossible ».
+1. Reproduire avec une question non sensible sur une discussion de test. Vérifier la fin brute du POST /api/conversations/{cid}/turns côté FastAPI, puis via le proxy Angular sur une autre discussion de test. Rapporter le dernier type d’événement reçu et l’erreur Angular, sans journaliser le texte de la réponse.
+2. Corriger au point où le flux devient invalide. Si la fin manque côté Python, vérifier que le générateur vide sa file jusqu’au terminal même si ask() est déjà terminé. Émettre un seul completed après persistance ou un seul error en cas d’échec. Si le flux reçu est valide, vérifier le passage de partialText et du corps final à TurnStream.
+3. Dans chat-page.ts, retirer l’avertissement de flux uniquement si la relecture confirme que la réponse finale du tour qui vient d’être envoyé a bien été enregistrée. Garder l’avertissement si le lien avec ce tour est incertain et préserver les erreurs explicites du serveur. Aucun renvoi automatique du POST.
 
-1. Reproduire un seul POST /api/conversations avec le corps {}, comme Angular. Relever le statut HTTP et l’erreur serveur anonymisée. Si le POST échoue, vérifier dans la liste des discussions si l’écriture a déjà eu lieu avant de réessayer.
-2. Inspecter le handler dans app/http_api.py. Vérifier les champs requis à l’entrée, la signature et le retour réel de Store.new_conversation(uid), puis la validation du modèle de sortie. Angular attend {conversation_id: string, title: string}. Si une conversion est nécessaire, l’appliquer au champ concerné à la frontière HTTP. Préserver le correctif de lecture déjà appliqué.
-3. En mode start:api, vérifier qu’un clic crée une seule discussion, l’ouvre avec un historique vide et qu’elle est retrouvée après actualisation. Vérifier aussi la réouverture d’une ancienne discussion.
+Valider trois cas. Un tour normal se termine sans avertissement. Une confirmation perdue avec réponse finale retrouvée affiche la réponse seule. Une confirmation perdue sans réponse finale conserve l’avertissement. Aucun cas ne crée de doublon.
 
-Pour « L’avis enregistré est indisponible », relever uniquement le statut du GET /api/conversations/{cid}/messages/{messageId}/feedback et vérifier si la route existe. L’avis sera traité dans son propre lot.
 
-Rapporter la cause constatée, le correctif et les résultats réellement observés. Le lot 1C sera testé après cette correction.
+
+
+APPLY 1D — Brancher uniquement la lecture et l’enregistrement d’un avis.
+
+Dans app/http_api.py, implémenter GET et PUT
+/api/conversations/{cid}/messages/{messageId}/feedback
+selon le contrat frontend/README.md et les types ResponseFeedback et FeedbackReceipt.
+
+Vérifier l’accès à la conversation et au message. Résoudre le run_id côté serveur avec Store.run_for_message. GET renvoie l’avis enregistré ou HTTP 200 avec JSON null si aucun avis n’existe. PUT sauvegarde helpful, reason et comment via Store.save_feedback, puis utilise export_run. Si l’export MLflow échoue après une sauvegarde réussie, renvoyer l’avis sauvegardé avec tracking_warning: true.
+
+En mode start:api, vérifier sur une réponse éligible que le formulaire s’ouvre sans avis préalable, qu’un avis s’enregistre et qu’il est prérempli après actualisation. Rapporter les résultats observés.
