@@ -1,9 +1,31 @@
-APPLY 1F — Raccorder « Ajouter et indexer » dans Angular.
+APPLY — Correctif 1F — Corriger le 500 de « Ajouter et indexer »
 
-Les GET et PATCH /skills répondent 200 et la recherche documentaire fonctionne. Le clic « Ajouter et indexer » envoie POST /api/conversations/{cid}/sources et reçoit 404. Vérifier que cette route est déclarée dans l’application FastAPI réellement lancée, puis la raccorder dans app/http_api.py.
+Le backend renvoie 500 sur POST /api/conversations/{cid}/sources.
+GET et PATCH /skills fonctionnent. Traiter ce POST dans app/http_api.py
+et la dépendance désignée par l’exception.
 
-1. Accepter le corps {"url":"..."}. Réutiliser l’identité serveur et le contrôle d’accès à la discussion du lot 1E. Appliquer la validation d’URL et le périmètre SharePoint existants côté Python.
-2. Reprendre le chemin utilisé par « Ajouter et indexer » dans app/ui.py. Appeler enqueue_source_sync avec Synchronizer.index_from_chat, les racines autorisées et le suivi existant. Réutiliser ce même pipeline pour le parcours des dossiers et sous-dossiers.
-3. Dès que la source et sa tâche sont enregistrées, retourner le SkillState actualisé avec la même projection que GET /skills. La source doit contenir source_id et job_id sous forme de chaînes et le job_id doit être lisible par le GET /source-jobs/{jobId} du lot 1E. Le POST rend la main pendant que la tâche s’exécute. Retourner les erreurs d’ajout au format {code, message} attendu par Angular.
+1. Retrouver l’exception exacte côté serveur. Si le handler transforme
+   l’exception en 500 sans la journaliser, utiliser le logger serveur
+   existant. Relever le type, la fonction et la ligne en cause.
 
-Recette en mode start:api avec une petite source de test autorisée, déjà acceptée par Streamlit. Vérifier qu’un clic produit un POST 2xx, qu’une seule source apparaît, que son job est suivi jusqu’à completed ou failed et que la source est retrouvée après actualisation. En cas de succès, la sélectionner et vérifier qu’une question de test retrouve un document indexé. Si la tâche échoue, rapporter l’étape et l’erreur anonymisée. Un POST 2xx prouve la mise en file, la recherche du document valide le parcours complet.
+2. Avant de renvoyer le POST, relire GET /skills pour vérifier si le
+   premier essai a déjà créé la source. Si un job_id existe pour cet
+   ajout, vérifier son état avec GET /source-jobs/{jobId}. Si GET /skills
+   échoue aussi, contrôler l’état de la source et du job côté serveur.
+
+3. Comparer le handler à l’appel Streamlit. Vérifier la signature de
+   enqueue_source_sync et notamment export_job, fourni par Streamlit.
+   Si l’exception se produit après la mise en file, vérifier la
+   projection de la source dans SkillState, notamment source_id,
+   job_id et status, selon chat.models.ts. Corriger la cause observée
+   en réutilisant le pipeline et les contrôles d’accès existants.
+
+4. Tester depuis Angular en mode API réel avec un petit dossier autorisé
+   que le pipeline sait indexer. Attendu pour le même ajout : POST 200
+   avec la nouvelle source et son job_id, suivi du job jusqu’à completed
+   et document attendu présent dans l’index. Vérifier séparément le
+   comportement prévu par le résolveur pour l’URL de vue de liste du
+   test initial.
+
+Rendre un compte rendu anonymisé avec l’exception, le correctif et les
+résultats HTTP et d’indexation réellement observés.
