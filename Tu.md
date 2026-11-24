@@ -1,45 +1,33 @@
-APPLY ciblé — Mes documents indexés et Reprendre un sujet
+APPLY — Rétablir l’indexation avec un correctif ciblé
 
-1. Rendre le retrait utilisable dans Angular.
-Ajouter « Mes documents indexés » dans le chat. Brancher la liste
-sur GET /api/me/indexed-documents et le bouton « Retirer » sur
-DELETE /api/me/indexed-documents/{doc_id}. Actualiser la liste après
-l’ajout d’une source et après un retrait réussi, sans rechargement.
+Depuis le commit 82c6ed3, Chunker est passé d’un budget en mots à
+une estimation en caractères. L’API d’embeddings renvoie HTTP 400
+input_tokens au-delà de 512 tokens. Le plafond à 1 400 caractères
+n’a pas résolu le problème.
 
-Côté serveur, vérifier le lien du compte courant et ses droits
-effectifs. Le retrait doit sortir le document de sa liste et de son
-RAG personnel, même si une ancienne source reste sélectionnée.
-Un rescan ou un ancien job doit respecter ce retrait.
+1. Restaurer le découpage qui fonctionnait.
+   Lire git diff 82c6ed3^ 82c6ed3 -- app/parsing.py. Réintégrer
+   uniquement le découpage par mots du parent dans le Chunker
+   actuel. Aligner count, split, le budget du préfixe et le
+   chevauchement sur la même unité. Retirer le patch à 1 400
+   caractères devenu redondant.
 
-Vérifier remove_my_document. Au dernier retrait, la purge doit
-couvrir SQLite et l’index vectoriel. Tenir compte des rétentions
-existantes et rendre le nettoyage relançable et sûr face à un ajout
-concurrent. Vérifier sur copie la compatibilité avec l’ancien
-catalogue SharePoint, y compris les doc_id dérivés de l’URL.
+2. Protéger contre le dépassement résiduel.
+   Si le tokenizer exact du modèle déployé est déjà disponible,
+   vérifier l’entrée complète, titre et section compris, avant
+   l’envoi. Sinon, sur le seul 400 de dépassement de contexte,
+   reprendre une fois le document refusé avec un budget réduit
+   via le même Chunker. Le repli doit aussi pouvoir couper un bloc
+   sans espaces et conserver tout le texte. Si le refus persiste,
+   remonter sa cause dans le job. Publier seulement une génération
+   complète avec un vecteur par fragment final.
 
-2. Rétablir la création automatique et la reprise des thèmes.
-Rechercher les écritures existantes dans themes et suivre un tour
-réussi depuis POST /turns. Si Angular contourne une écriture déjà
-présente, la raccorder. Si elle manque réellement, créer ou mettre
-à jour le thème après un tour éligible, à partir du sujet déjà
-identifié par le routage. Utiliser le schéma réel du Store et
-conserver une clé stable. Le Store reste chargé de la persistance.
+3. Rejouer le document qui échouait.
+   Passer par « Ajouter et indexer » en mode API réel. Vérifier
+   que le job termine, que la fin du document est retrouvable
+   et que le document apparaît une seule fois dans « Mes documents
+   indexés ». En cas d’échec de réindexation, vérifier que
+   l’ancienne génération reste consultable.
 
-Dans GET /api/conversations/suggestions, produire le champ prompt
-attendu par Angular à partir du thème et de sa dernière question.
-Vérifier le rôle de context_hash avant de valider sa suppression.
-La suggestion et la conversation doivent rester accessibles au
-compte courant selon ses droits actuels. Au clic, ouvrir le
-conversation_id existant et envoyer le prompt une seule fois.
-
-Recette à exécuter sur données de test.
-- A et B utilisent le même SQLite et le même index. B ajoute le
-  fichier déjà indexé par A avec zéro nouvelle écriture vectorielle.
-  A le retire depuis Angular. B le retrouve encore dans sa recherche.
-  B le retire à son tour. Vérifier la purge SQLite et vectorielle
-  si le document n’a plus aucune référence à conserver.
-- Un compte sans thème en crée un via un échange éligible dans le
-  chat. Vérifier sa présence dans « Reprendre un sujet » et son
-  actualisation dans la conversation d’origine.
-
-Rapporter les causes confirmées et les tests réellement exécutés.
+Appliquer et tester dans ce passage. Rapporter le diff ciblé
+et le résultat du job réel.
