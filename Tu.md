@@ -1,31 +1,14 @@
-APPLY — Stabiliser l’indexation sur la limite de 512 tokens
+Corriger les régressions du chat Angular après le changement A2 sur l’historique des postes. Deux cas sont signalés : « Quel est mon dernier poste ? » et « Quelles sont mes formations suivies ? ». Le diagnostic rapporte une synthèse avec user_data={} et un résolveur qui attend un événement de type tool_call. Appliquer le correctif dans cette session dès que l’étape fautive est reproduite.
 
-Le retour à une ancienne version de parsing.py a laissé des HTTP
-400 input_tokens sur POST /embeddings. Corriger dans le Chunker et
-le client existants.
+1. Reproduire les deux demandes depuis le point d’entrée utilisé par Angular. Pour chaque demande, relever la route, l’opération attendue, la structure de la réponse brute du premier appel LLM, les événements transmis à l’agent, l’appel MCP effectif et le nombre de lignes reçues à la synthèse. Utiliser une trace de test avec les types, statuts et compteurs, sans contenu RH. Tester aussi les outils MCP concernés directement avec des données de test connues. Comparer le chemin des formations au diff d’A2.
 
-1. Vérifier le Chunker chargé par le backend actif et mesurer la
-   longueur maximale des chaînes finales juste avant le POST.
-   En dépannage, appliquer 250 caractères maximum à chaque chaîne
-   finale, préfixe compris. Redécouper le corps pour le conserver
-   en entier. Raccourcir le préfixe d’embedding s’il prend toute
-   la place et conserver les titres complets dans les métadonnées.
+2. Corriger la première rupture prouvée.
+   - Si le modèle émet un appel qui se perd entre le client LLM et l’agent, corriger la normalisation ou la lecture à l’endroit où il se perd. Rejouer le format réellement observé et vérifier qu’un appel complet déclenche une seule exécution.
+   - Si le parcours des postes attend un choix d’outil du modèle alors que le routage a déjà identifié l’opération, remettre en place le contrat A2. Le modèle extrait uniquement les paramètres depuis le schéma de cette opération. Le backend valide ces paramètres, puis déclenche la lecture via l’exécuteur existant et l’identité de session. Utiliser le même client métier pour le tri et la pagination.
+   - Si le problème est dans le dispatch MCP ou dans la transmission du résultat à la synthèse, corriger cette étape. Si le diff montre qu’une condition ajoutée pour les postes bloque les formations, limiter cette condition au parcours des postes et rétablir le chemin précédent des formations. Vérifier quelle opération correspond aux formations suivies et quelle opération correspond aux demandes de formation.
 
-2. Si le tokenizer JSON de la révision déployée peut être importé,
-   charger ce fichier une fois et compter l’entrée finale avec
-   encode(..., add_special_tokens=True), troncature désactivée.
-   Valider le comptage contre le service sur une entrée synthétique
-   seule. Appliquer ensuite le plafond confirmé en tokens dans
-   le Chunker.
+3. Pour une question qui exige une lecture métier, autoriser la synthèse seulement après une lecture réussie avec des données. Une lecture réussie à zéro ligne donne « Aucun résultat ». Une invocation absente, des paramètres invalides ou un échec MCP donnent un état explicite adapté. Réutiliser le mécanisme de réponse Angular existant.
 
-3. Si l’import est indisponible, conserver le plafond de dépannage.
-   Sur un 400 input_tokens persistant, tester l’entrée seule dans
-   la requête. Si elle passe seule, réduire le lot via le batching
-   existant. Si elle échoue seule, redécouper ce fragment via le
-   même Chunker avec des tentatives bornées. Garder la cause du
-   refus dans le job si le repli échoue.
+4. Valider depuis le même point d’entrée qu’Angular. Sur plusieurs postes de test, vérifier le bon dernier poste, la liste complète et les deux premiers selon l’ordre métier confirmé. Vérifier le retour des formations sur un jeu connu, puis tester séparément une lecture vide et un échec MCP. Rejouer une question de profil et une question documentaire si le client partagé a été modifié.
 
-Rejouer le document qui échouait depuis « Ajouter et indexer ».
-Vérifier un job terminé, un vecteur par fragment et la fin du
-document retrouvable. En cas d’échec, préserver l’indexation
-précédente du document.
+Rendre la preuve avant/après, les fichiers modifiés et les résultats des tests réellement exécutés. Si une étape reste invérifiable, indiquer le test précis qui manque et suspendre le changement qui en dépend.
