@@ -1,34 +1,86 @@
-APPLY — Correctif 1F — Rétablir « Ajouter et indexer »
+Réfléchi pendant 2m 6s
 
-Le POST /api/conversations/{cid}/sources renvoie 500. GET et PATCH
-/skills fonctionnent. Corriger le raccordement FastAPI au pipeline
-d’indexation existant.
+La priorité est de réparer le retour d’API commun à tous les tours. « Liste de mes postes » sert à reproduire la panne. Les thèmes feront l’objet de trois lots courts, de l’analyse de l’historique jusqu’à l’affichage des questions.
 
-1. Après le 500, relire GET /skills avant tout nouvel envoi. Si la
-   source a déjà été créée, relever son job_id et lire son état avec
-   GET /source-jobs/{jobId}. Cela permet de vérifier si la mise en
-   file a eu lieu malgré l’échec HTTP.
+1. Réparer le retour du chat
 
-2. Reproduire une fois et relever la première exception côté serveur.
-   Identifier l’étape qui échoue parmi l’initialisation de Vectors ou
-   Synchronizer, l’appel à enqueue_source_sync et la construction
-   de la réponse SkillState. Si le handler masque la trace, utiliser
-   le logger serveur existant. Examiner le worker si le job a été créé.
+APPLY — Corriger la régression commune à toutes les réponses Angular
 
-3. Corriger la ligne confirmée par la trace. Vérifier en particulier
-   le contrat d’export_job et ses appels. Si None est accepté, son
-   traitement doit être explicite. Si un callback est requis,
-   raccorder le suivi existant côté backend comme dans le flux
-   Streamlit. Si l’échec survient à la construction de SkillState,
-   réutiliser la projection de GET /skills avec la source réelle.
-   La méthode liée conserve déjà son instance tant que la file
-   la référence. Fonder tout changement de cycle de vie sur la trace.
+Depuis Angular en mode API réel, comparer le diff récent au dernier
+état fonctionnel. Suivre un même tour de POST /api/conversations/{cid}/turns
+jusqu’à la sauvegarde du message assistant, à l’événement terminal
+NDJSON et à GET /api/conversations/{cid}/messages.
 
-4. Valider depuis Angular en mode API réel avec un petit dossier
-   autorisé que Streamlit sait indexer. Pour un même ajout, constater
-   un POST 200 avec le job_id, suivre ce job jusqu’à completed et
-   retrouver le document attendu dans l’index.
+Corriger le plus petit changement qui a cassé ce chemin partagé.
+Vérifier que completed est émis une seule fois après sauvegarde et
+qu’Angular affiche la réponse du même tour. En cas de coupure du flux,
+la relecture peut récupérer cette réponse si elle est bien persistée.
+Un échec réel doit rester visible et la question doit être envoyée
+une seule fois.
 
-Rapporter l’exception exacte, le fichier et la ligne corrigés, puis
-les résultats observés. Si la recette réelle est bloquée, indiquer
-l’étape et le blocage précis.
+Recette en API réelle sur « Qui suis-je ? », « Liste de mes postes »
+et une question documentaire. Vérifier que chaque réponse aboutie
+reste visible après rechargement. Rapporter le delta fautif.
+
+2. Livrer « Mes documents indexés »
+
+APPLY — Brancher la gestion documentaire dans Angular
+
+Ajouter une entrée visible « Mes documents indexés » dans la barre
+latérale. Lire GET /api/me/indexed-documents et relier « Retirer » à
+DELETE /api/me/indexed-documents/{doc_id}. Gérer chargement, liste vide
+et erreur. Actualiser après un retrait réussi et à la fin d’un ajout,
+y compris quand l’indexation existante est réutilisée.
+
+Recette sur le même stockage de test pour A et B. B rattache le
+fichier de A sans recréer ses vecteurs. A le retire dans Angular.
+Le fichier disparaît pour A et reste accessible à B. Vérifier la
+purge au dernier retrait pour un document détenu uniquement à la demande.
+
+3. Générer des thèmes et des questions à partir de l’historique
+
+APPLY — Générateur de suggestions personnelles côté backend
+
+À partir d’une sélection bornée de conversations abouties et visibles
+par le compte courant, produire avec le LLM interne une courte synthèse
+sémantique et jusqu’à trois questions de suivi distinctes, en français.
+Les questions doivent découler des sujets réellement abordés.
+Valider la sortie structurée et rattacher chaque suggestion à une
+conversation d’origine autorisée. Utiliser les champs conversation_id,
+theme_key, title et prompt, où prompt contient la question proposée.
+
+Livrer et tester le générateur indépendamment de l’UI. Couvrir un
+historique avec plusieurs sujets, un historique vide et une sortie
+invalide du modèle.
+
+4. Déclencher la génération au démarrage, en arrière-plan
+
+APPLY — Exécuter le générateur à l’ouverture de la session Angular
+
+Après résolution de l’identité au démarrage, déclencher la génération
+en arrière-plan. Le chat doit être utilisable immédiatement. Persister
+les résultats par utilisateur et les exposer via
+GET /api/conversations/suggestions.
+
+Réutiliser le résultat tant que l’historique pertinent est inchangé.
+Deux démarrages rapprochés doivent partager un seul calcul en cours.
+Si « Effacer les échanges » intervient pendant le calcul, empêcher
+la publication du résultat devenu obsolète.
+
+Tester le démarrage non bloquant, la réutilisation du résultat et
+la régénération au démarrage suivant après évolution de l’historique.
+
+5. Afficher les questions dans les deux parcours
+
+APPLY — Afficher les suggestions dans Angular
+
+Sur l’écran vide « Nouvelle discussion », afficher directement les
+questions personnalisées dès qu’elles sont disponibles. Un clic envoie
+la question une seule fois dans la discussion ouverte. Pendant le calcul
+ou avec un historique vide, laisser le champ libre et afficher les
+amorces génériques prévues.
+
+Conserver la popup « Reprendre un sujet ». Elle lit les mêmes
+suggestions. Son action ouvre la conversation d’origine et y envoie
+la question. Vérifier les deux comportements dans le navigateur et
+exécuter le build Angular.
