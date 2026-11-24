@@ -1,36 +1,6 @@
-feat(api): exposer le profil utilisateur (1A)
+APPLY avec ces corrections au plan.
 
-- Ajoute GET /api/me avec résolution de l’identité POC côté serveur.
-- Projette le profil dans le modèle SessionProfile.
-
-feat(chat): raccorder les conversations et l’historique (1B)
-
-- Expose la liste, la création et la lecture des conversations.
-- Raccorde le proxy Angular et indique quels messages peuvent être évalués.
-
-feat(chat): diffuser la progression des tours (1C)
-
-- Ajoute POST /turns et les événements de progression en NDJSON.
-- Corrige la fin de flux et recharge les messages persistés.
-
-feat(chat): enregistrer les évaluations par message (1D)
-
-- Raccorde la lecture et l’enregistrement d’un avis au run du message.
-- Relie la sauvegarde de l’avis à l’export du run vers MLflow.
-
-feat(rag): exposer les réglages documentaires et le suivi des jobs (1E)
-
-- Raccorde la recherche documentaire, la vérification et la sélection des sources.
-- Expose le statut et la progression des jobs d’indexation.
-
-feat(rag): ajouter une source SharePoint depuis Angular (1F)
-
-- Ajoute POST /sources et réutilise la file d’indexation existante.
-- Retourne l’état documentaire mis à jour avec le job_id.
-- Corrige l’import de enqueue_source_sync dans la route.
-
-feat(chat): raccorder la mémoire et l’export des jobs (1G)
-
-- Expose jusqu’à trois suggestions de reprise via Access.suggestions.
-- Efface les échanges et les thèmes de l’utilisateur puis ouvre une discussion vide.
-- Branche source_job_trace sur le callback d’export des jobs.
+- Imposer l’unicité sur la clé native SharePoint (périmètre, ID fichier). Le lien direct et le parcours doivent résoudre la même clé, y compris via sourcedoc. Réconcilier l’historique sur copie, uniquement si cette identité est confirmée. Le titre et raw_hash servent au repérage.
+- Brancher la vue Angular « Mes documents indexés » sur les demandes explicites du compte ET ses droits actuels. Appliquer ce filtre au RAG personnel. Retirer le lien immédiatement et empêcher sa recréation par un rescan ou un ancien job.
+- Enregistrer la purge dans la transaction du dernier retrait, en tenant compte des rétentions existantes. Le nettoyage des chunks et vecteurs doit être relançable et coordonné avec les ajouts concurrents.
+- Pour la reprise, projeter les thèmes existants dans la route HTTP. Ouvrir le conversation_id de la suggestion et envoyer son prompt une seule fois via POST /turns.
