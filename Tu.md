@@ -1,19 +1,56 @@
-PLAN puis APPLY. Implémenter le tool calling natif de Chat Completions dans le parcours profile du chat Angular. Le LLM choisit l’outil et ses arguments à partir de la question. Le backend exécute l’outil MCP, renvoie son résultat au LLM, puis affiche la synthèse dans Angular.
+Corrige l’échec actuel du tool MCP user_jobs et la poursuite du workflow
+avec des données absentes.
 
-Phase 1 — Vérifier la faisabilité avec un seul fichier de test
+Constats observés :
+- Le client reçoit une réponse MCP avec isError=True.
+- Le contenu indique : "Error executing tool user_jobs: [Errno 9] Bad file descriptor".
+- execute_tools transforme ensuite cet échec en final_data vide.
+- Le workflow continue et appelle le LLM avec {}.
+- Juste avant ce test, les prints du serveur MCP ont été redirigés vers sys.stderr.
+- Le timeout de la session MCP a aussi été forcé à 30 secondes.
+- Les précédents logs montraient des messages de debug sur le stdout MCP.
 
-Créer et exécuter un fichier de test avec la même API compatible, le même modèle et la même authentification que l’application. Appeler POST /chat/completions via le transport HTTP existant, avec stream=false, pour observer la réponse brute de l’API.
+Travail demandé :
 
-Déclarer deux fonctions fictives dans tools, chacune au format {"type":"function","function":{"name":...,"description":...,"parameters":...}}. La première lit les postes avec une limite et un ordre de tri. La seconde lit les demandes de formation. Envoyer « Quel est mon dernier poste ? » avec tool_choice="required" pour demander un appel tout en laissant le modèle choisir la fonction. Si ce réglage échoue, rejouer la même demande une fois avec tool_choice="auto".
+1. Inspecte le diff récent ainsi que le code réel de :
+   - user_jobs et les fonctions appelées ;
+   - création et durée de vie de la session MCP stdio ;
+   - gestion de stderr et du processus serveur ;
+   - execute_tools et le workflow qui appelle le LLM.
 
-Vérifier dans choices[0].message.tool_calls que le modèle a choisi l’outil des postes et produit des arguments JSON valides pour un seul poste, du plus récent au plus ancien. Exécuter la fonction fictive avec ces arguments. Ajouter à messages le message assistant contenant les tool_calls, puis un message {"role":"tool","tool_call_id":<id de l’appel>,"content":<résultat sérialisé en texte>}. Relancer Chat Completions pour la synthèse et vérifier que sa réponse reprend un intitulé de poste fictif fourni uniquement par l’outil.
+2. Identifie la ligne qui lève réellement Errno 9 côté serveur.
+   Vérifie en priorité les écritures vers stderr, y compris avant le try
+   de user_jobs, puis les autres opérations sur les flux ou fichiers.
+   Conclus à partir du traceback et des tests, sans supposer que stderr
+   est forcément responsable.
 
-Passer à la phase 2 si cet aller-retour réussit. En cas d’échec, indiquer l’étape exacte et le résultat observé.
+3. Corrige le raccordement ou la durée de vie du flux de diagnostic
+   si la cause est confirmée. Réutilise la configuration de logging
+   existante lorsque c’est possible. Les logs du serveur doivent rester
+   hors du stdout réservé au protocole MCP. Une erreur de journalisation
+   ne doit pas faire échouer la récupération des données.
 
-Phase 2 — Intégrer dans l’application
+4. Corrige la propagation des erreurs :
+   - conserver l’échec du tool jusqu’au workflow ;
+   - distinguer un résultat métier réellement vide d’un échec technique ;
+   - si les données requises pour répondre sont indisponibles, ne pas
+     générer une réponse de profil à partir de {} ;
+   - retourner à l’interface un message d’erreur clair.
 
-Réutiliser le routeur, le client LLM et l’exécuteur MCP existants. Pour la lecture métier, construire tools à partir des outils MCP autorisés pour la demande. Utiliser leur nom, leur description et leur inputSchema comme function.parameters. Reprendre le mode tool_choice validé et utiliser stream=false pour cet appel interne de sélection.
+5. Rétablis le timeout configurable précédent si la valeur de 30 secondes
+   a été imposée sans justification. Ne modifie pas les autres timeouts.
 
-Lire les appels dans message.tool_calls. Valider le nom et les arguments contre les outils exposés. Utiliser l’identité issue de la session. Exécuter chaque appel valide via MCP et rattacher son résultat au tool_call_id correspondant. Appeler la synthèse après réception des résultats et publier son texte via le flux Angular existant. Pour un appel absent, invalide ou en échec, afficher un état explicite. Réserver « Aucun résultat » à une lecture réussie à zéro ligne.
+6. Vérifie aussi le cas observé précédemment où les arguments semblaient
+   contenir des chaînes "True" et où fields valait []. Contrôle les types
+   reçus à l’entrée du tool et corrige la conversion à la source si nécessaire.
+   Préserve le comportement attendu lorsqu’aucun filtre n’est demandé.
 
-Valider depuis Angular avec « Quel est mon dernier poste ? » sur un historique connu. Vérifier l’outil choisi, la limite et le tri selon son contrat réel, puis le poste affiché. Rendre la commande du test de faisabilité, son résultat et les fichiers modifiés.
+7. Teste le parcours réel avec :
+   - une requête simple ;
+   - la requête large qui échouait ;
+   - un échec simulé du tool pour vérifier que le LLM n’est pas appelé
+     avec des données absentes ;
+   - une vérification que stdout contient uniquement les messages MCP.
+
+À la fin, indique la ligne exacte à l’origine d’Errno 9, le correctif,
+les résultats des tests et toute cause qui reste non confirmée.
